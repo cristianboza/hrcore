@@ -1,281 +1,381 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useProfile, useProfilePermissions, useDeleteProfile } from '../hooks/useProfile';
-import { useSubmitFeedback } from '../hooks/useFeedback';
-import { useSubmitAbsenceRequest } from '../hooks/useAbsence';
-import { useAuthStore } from '../store/authStore';
+import { useTranslation } from 'react-i18next';
+import { 
+  useProfile, 
+  useProfilePermissions, 
+  useDeleteProfile,
+  useDirectReports,
+  useManager
+} from '@/hooks/useProfile';
+import { useAuthStore } from '@/store/authStore';
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Separator } from '@/components/ui/separator';
+import { Label } from '@/components/ui/label';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ProfileFeedbackTab } from './ProfileFeedbackTab';
+import { ProfileAbsenceTab } from './ProfileAbsenceTab';
+import { FeedbackForm } from './FeedbackForm';
+import { AbsenceForm } from './AbsenceForm';
 
 export const ProfileDetail: React.FC = () => {
+  const { t } = useTranslation();
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
   const currentUser = useAuthStore((state) => state.currentUser);
   const { mutate: deleteProfile } = useDeleteProfile();
-  const { mutate: submitFeedback } = useSubmitFeedback();
-  const { mutate: submitAbsenceRequest } = useSubmitAbsenceRequest();
 
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
-  const [feedbackContent, setFeedbackContent] = useState('');
   const [showAbsenceForm, setShowAbsenceForm] = useState(false);
-  const [absenceData, setAbsenceData] = useState({
-    startDate: '',
-    endDate: '',
-    type: 'VACATION',
-    reason: '',
-  });
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  const id = userId ? parseInt(userId, 10) : 0;
-  const { data: profile, isLoading, error } = useProfile(id);
-  const { data: permissions } = useProfilePermissions(id);
+  const { data: profile, isLoading, error } = useProfile(userId);
+  const { data: permissions } = useProfilePermissions(userId);
+  const { data: directReports } = useDirectReports(userId);
+  const { data: manager } = useManager(userId);
+
+  const isOwnProfile = currentUser?.id === userId;
+  
+  // Check if current user is direct manager
+  const isDirectManager = manager?.id === currentUser?.id || profile?.manager?.id === currentUser?.id;
+  
+  // Tabs are visible to: own user, direct manager, or admin
+  const canViewTabs = isOwnProfile || isDirectManager || currentUser?.role === 'SUPER_ADMIN';
 
   if (isLoading) {
     return (
       <div className="flex justify-center items-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <span className="ml-2">{t('common.loading')}</span>
       </div>
     );
   }
 
   if (error || !profile) {
     return (
-      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-        Error loading profile: {error instanceof Error ? error.message : 'Profile not found'}
-      </div>
+      <Alert variant="destructive">
+        <AlertDescription>
+          {t('profile.loadError')}: {error instanceof Error ? error.message : 'Profile not found'}
+        </AlertDescription>
+      </Alert>
     );
   }
 
   const handleDelete = () => {
-    if (confirm(`Are you sure you want to delete ${profile.firstName} ${profile.lastName}?`)) {
-      deleteProfile(
-        { userId: profile.id },
-        {
-          onSuccess: () => {
-            navigate('/profiles');
-          },
-          onError: (error: any) => {
-            alert('Error deleting profile: ' + (error.message || 'Unknown error'));
-          },
-        }
-      );
-    }
-  };
-
-  const handleSubmitFeedback = () => {
-    if (!feedbackContent.trim()) {
-      alert('Please enter feedback content');
-      return;
-    }
-    if (!currentUser) return;
-    
-    submitFeedback(
-      {
-        fromUserId: currentUser.id,
-        toUserId: profile.id,
-        content: feedbackContent,
+    if (!profile) return;
+    deleteProfile(profile.id, {
+      onSuccess: () => navigate('/profiles'),
+      onError: (error: any) => {
+        alert('Error deleting profile: ' + (error.message || 'Unknown error'));
       },
-      {
-        onSuccess: () => {
-          setFeedbackContent('');
-          setShowFeedbackForm(false);
-          alert('Feedback submitted successfully!');
-        },
-        onError: (error: any) => {
-          alert('Error submitting feedback: ' + (error.message || 'Unknown error'));
-        },
-      }
-    );
-  };
-
-  const handleSubmitAbsence = () => {
-    if (!absenceData.startDate || !absenceData.endDate) {
-      alert('Please fill in all required fields');
-      return;
-    }
-    
-    submitAbsenceRequest(
-      {
-        userId: profile.id,
-        startDate: absenceData.startDate,
-        endDate: absenceData.endDate,
-        type: absenceData.type,
-        reason: absenceData.reason,
-      },
-      {
-        onSuccess: () => {
-          setAbsenceData({ startDate: '', endDate: '', type: 'VACATION', reason: '' });
-          setShowAbsenceForm(false);
-          alert('Absence request submitted successfully!');
-        },
-        onError: (error: any) => {
-          alert('Error submitting absence request: ' + (error.message || 'Unknown error'));
-        },
-      }
-    );
+    });
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <Link to="/profiles" className="text-blue-600 hover:text-blue-800 mb-4 inline-block">
-        ← Back to Profiles
-      </Link>
+    <div className="max-w-4xl mx-auto p-6">
+      <Button variant="ghost" asChild className="mb-4">
+        <Link to="/profiles">← {t('common.back')}</Link>
+      </Button>
 
-      <div className="bg-white rounded-lg shadow p-8">
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <h1 className="text-3xl font-bold">
-              {profile.firstName} {profile.lastName}
-            </h1>
-            <p className="text-gray-600 text-lg">{profile.email}</p>
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-start">
+            <div>
+              <CardTitle className="text-3xl">
+                {profile.firstName} {profile.lastName}
+              </CardTitle>
+              <CardDescription className="text-lg">{profile.email}</CardDescription>
+            </div>
+            <Badge variant="secondary" className="text-sm">
+              {t(`roles.${profile.role}`)}
+            </Badge>
           </div>
-          <span className="inline-block bg-blue-100 text-blue-800 px-4 py-2 rounded-full font-semibold">
-            {profile.role}
-          </span>
-        </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <Label className="text-sm font-semibold">{t('profile.phoneNumber')}</Label>
+              <p className="text-foreground mt-1">{profile.phone || 'Not provided'}</p>
+            </div>
 
-        <div className="grid grid-cols-2 gap-6 mb-8">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Phone</label>
-            <p className="text-gray-900">{profile.phone || 'Not provided'}</p>
+            <div>
+              <Label className="text-sm font-semibold">{t('profile.department')}</Label>
+              <p className="text-foreground mt-1">{profile.department || 'Not provided'}</p>
+            </div>
+
+            <div>
+              <Label className="text-sm font-semibold">Member Since</Label>
+              <p className="text-foreground mt-1">
+                {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : 'N/A'}
+              </p>
+            </div>
+
+            <div>
+              <Label className="text-sm font-semibold">Last Updated</Label>
+              <p className="text-foreground mt-1">
+                {profile.updatedAt ? new Date(profile.updatedAt).toLocaleDateString() : 'N/A'}
+              </p>
+            </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Department</label>
-            <p className="text-gray-900">{profile.department || 'Not provided'}</p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Member Since</label>
-            <p className="text-gray-900">
-              {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : 'N/A'}
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Last Updated</label>
-            <p className="text-gray-900">
-              {profile.updatedAt ? new Date(profile.updatedAt).toLocaleDateString() : 'N/A'}
-            </p>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex flex-wrap gap-4 border-t pt-6 mb-6">
-          {permissions?.canEdit && (
-            <Link
-              to={`/profiles/${profile.id}/edit`}
-              className="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600 transition"
-            >
-              Edit Profile
-            </Link>
-          )}
-
-          {permissions?.canDelete && (
-            <button
-              onClick={handleDelete}
-              className="bg-red-500 text-white px-6 py-2 rounded hover:bg-red-600 transition"
-            >
-              Delete Profile
-            </button>
-          )}
-
-          {currentUser?.id !== profile.id && (
+          {(manager || profile.manager) && (
             <>
-              <button
-                onClick={() => setShowFeedbackForm(!showFeedbackForm)}
-                className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 transition"
-              >
-                {showFeedbackForm ? 'Cancel Feedback' : 'Give Feedback'}
-              </button>
-
-              <button
-                onClick={() => setShowAbsenceForm(!showAbsenceForm)}
-                className="bg-purple-500 text-white px-6 py-2 rounded hover:bg-purple-600 transition"
-              >
-                {showAbsenceForm ? 'Cancel Request' : 'Request Absence'}
-              </button>
+              <Separator />
+              <div>
+                <h3 className="text-lg font-semibold mb-3">{t('profile.reportsTo')}</h3>
+                <Card>
+                  <CardContent className="p-4 flex items-center gap-3">
+                    <div className="bg-primary/10 rounded-full w-12 h-12 flex items-center justify-center text-primary font-bold text-lg">
+                      {(manager?.firstName || profile.manager?.firstName || 'U')[0]}
+                      {(manager?.lastName || profile.manager?.lastName || 'U')[0]}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold">
+                        {manager?.firstName || profile.manager?.firstName} {manager?.lastName || profile.manager?.lastName}
+                      </p>
+                      <p className="text-sm text-muted-foreground">{manager?.email || profile.manager?.email}</p>
+                    </div>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link to={`/profiles/${manager?.id || profile.manager?.id}`}>
+                        View Profile
+                      </Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
             </>
           )}
 
-          {!permissions?.canEdit && !permissions?.canDelete && currentUser?.id === profile.id && (
-            <div className="text-gray-600 italic">
-              This is your profile
-            </div>
+          {directReports && directReports.length > 0 && (
+            <>
+              <Separator />
+              <div>
+                <h3 className="text-lg font-semibold mb-3">{t('profile.directReports')}</h3>
+                <div className="space-y-2">
+                  {directReports.map((report) => (
+                    <Card key={report.id}>
+                      <CardContent className="p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-secondary rounded-full w-10 h-10 flex items-center justify-center font-bold">
+                            {report.firstName[0]}{report.lastName[0]}
+                          </div>
+                          <div>
+                            <p className="font-semibold">{report.firstName} {report.lastName}</p>
+                            <p className="text-sm text-muted-foreground">{report.email}</p>
+                          </div>
+                        </div>
+                        <Button variant="outline" size="sm" asChild>
+                          <Link to={`/profiles/${report.id}`}>View</Link>
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
-        </div>
 
-        {/* Feedback Form */}
-        {showFeedbackForm && (
-          <div className="bg-blue-50 border border-blue-200 rounded p-6 mb-6">
-            <h3 className="text-lg font-semibold mb-4">Give Feedback to {profile.firstName}</h3>
-            <textarea
-              value={feedbackContent}
-              onChange={(e) => setFeedbackContent(e.target.value)}
-              placeholder="Enter your feedback..."
-              className="w-full border rounded px-3 py-2 mb-4 h-24 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              onClick={handleSubmitFeedback}
-              className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 transition"
-            >
-              Submit Feedback
-            </button>
-          </div>
-        )}
+          <Separator />
 
-        {/* Absence Request Form */}
-        {showAbsenceForm && (
-          <div className="bg-purple-50 border border-purple-200 rounded p-6">
-            <h3 className="text-lg font-semibold mb-4">Request Absence for {profile.firstName}</h3>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Start Date</label>
-                <input
-                  type="date"
-                  value={absenceData.startDate}
-                  onChange={(e) => setAbsenceData({ ...absenceData, startDate: e.target.value })}
-                  className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">End Date</label>
-                <input
-                  type="date"
-                  value={absenceData.endDate}
-                  onChange={(e) => setAbsenceData({ ...absenceData, endDate: e.target.value })}
-                  className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {permissions?.canEdit && (
+                <Button asChild>
+                  <Link to={`/profiles/${profile.id}/edit`}>{t('common.edit')}</Link>
+                </Button>
+              )}
+              {permissions?.canDelete && (
+                <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
+                  {t('common.delete')}
+                </Button>
+              )}
             </div>
-            <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Type</label>
-              <select
-                value={absenceData.type}
-                onChange={(e) => setAbsenceData({ ...absenceData, type: e.target.value })}
-                className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                <option value="VACATION">Vacation</option>
-                <option value="SICK">Sick Leave</option>
-                <option value="PERSONAL">Personal</option>
-                <option value="OTHER">Other</option>
-              </select>
-            </div>
-            <div className="mb-4">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Reason</label>
-              <textarea
-                value={absenceData.reason}
-                onChange={(e) => setAbsenceData({ ...absenceData, reason: e.target.value })}
-                placeholder="Enter reason (optional)"
-                className="w-full border rounded px-3 py-2 h-20 focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-            </div>
-            <button
-              onClick={handleSubmitAbsence}
-              className="bg-purple-500 text-white px-6 py-2 rounded hover:bg-purple-600 transition"
-            >
-              Submit Request
-            </button>
+
+            {(permissions?.canGiveFeedback || permissions?.canRequestAbsence) && (
+              <>
+                <Separator className="my-3" />
+                <div className="grid grid-cols-2 gap-3">
+                  {permissions?.canGiveFeedback && (
+                    <Button 
+                      variant={showFeedbackForm ? "secondary" : "outline"} 
+                      onClick={() => {
+                        setShowFeedbackForm(!showFeedbackForm);
+                        setShowAbsenceForm(false);
+                      }}
+                      className="w-full"
+                    >
+                      <svg 
+                        className="mr-2 h-4 w-4" 
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round" 
+                          strokeWidth={2} 
+                          d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" 
+                        />
+                      </svg>
+                      {showFeedbackForm ? 'Hide Feedback' : 'Give Feedback'}
+                    </Button>
+                  )}
+                  {permissions?.canRequestAbsence && (
+                    <Button 
+                      variant={showAbsenceForm ? "secondary" : "outline"}
+                      onClick={() => {
+                        setShowAbsenceForm(!showAbsenceForm);
+                        setShowFeedbackForm(false);
+                      }}
+                      className="w-full"
+                    >
+                      <svg 
+                        className="mr-2 h-4 w-4" 
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path 
+                          strokeLinecap="round" 
+                          strokeLinejoin="round" 
+                          strokeWidth={2} 
+                          d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" 
+                        />
+                      </svg>
+                      {showAbsenceForm ? 'Hide Request' : 'Request Absence'}
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
-        )}
-      </div>
+
+          {showFeedbackForm && (
+            <Card className="bg-muted/30 border-2 border-primary/20 mt-4">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <svg 
+                    className="h-5 w-5 text-primary" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={2} 
+                      d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" 
+                    />
+                  </svg>
+                  Give Feedback to {profile.firstName} {profile.lastName}
+                </CardTitle>
+                <CardDescription>
+                  {isOwnProfile 
+                    ? 'Self-reflection and feedback will be reviewed by your manager' 
+                    : 'Feedback will be reviewed by their manager before being visible to the recipient'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <FeedbackForm 
+                  toUserId={profile.id}
+                  onSuccess={() => {
+                    setShowFeedbackForm(false);
+                    alert('Feedback submitted successfully!');
+                  }} 
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {showAbsenceForm && (
+            <Card className="bg-muted/30 border-2 border-primary/20 mt-4">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <svg 
+                    className="h-5 w-5 text-primary" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={2} 
+                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" 
+                    />
+                  </svg>
+                  {isOwnProfile ? 'Request Absence' : `Request Absence for ${profile.firstName} ${profile.lastName}`}
+                </CardTitle>
+                <CardDescription>
+                  {isOwnProfile 
+                    ? 'Your absence request will be reviewed and approved by your manager' 
+                    : 'This absence request will be reviewed and approved by their manager'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AbsenceForm 
+                  userId={profile.id}
+                  onSuccess={() => {
+                    setShowAbsenceForm(false);
+                    alert('Absence request submitted successfully!');
+                  }} 
+                />
+              </CardContent>
+            </Card>
+          )}
+        </CardContent>
+      </Card>
+
+      {canViewTabs && (
+        <Card className="mt-6">
+          <CardContent className="pt-6">
+            <Tabs defaultValue="details" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="details">Details</TabsTrigger>
+                <TabsTrigger value="feedback">Feedback</TabsTrigger>
+                <TabsTrigger value="absence">Absence</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="details" className="mt-6">
+                <div className="text-muted-foreground text-center py-8">
+                  <p>Profile details are shown above.</p>
+                </div>
+              </TabsContent>
+              
+              <TabsContent value="feedback" className="mt-6">
+                <ProfileFeedbackTab 
+                  userId={userId!} 
+                  isOwnProfile={isOwnProfile} 
+                  canManage={isDirectManager || currentUser?.role === 'SUPER_ADMIN'}
+                />
+              </TabsContent>
+              
+              <TabsContent value="absence" className="mt-6">
+                <ProfileAbsenceTab 
+                  userId={userId!} 
+                  isOwnProfile={isOwnProfile} 
+                  canManage={isDirectManager || currentUser?.role === 'SUPER_ADMIN'}
+                />
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      )}
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleDelete}
+        title="Delete Profile"
+        description={`Are you sure you want to delete ${profile.firstName} ${profile.lastName}? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="destructive"
+      />
     </div>
   );
 };

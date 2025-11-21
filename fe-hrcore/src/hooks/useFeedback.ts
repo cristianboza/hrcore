@@ -1,26 +1,40 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {feedbackService} from '../services/feedbackService';
+import {feedbackService, FeedbackSearchRequest, PageResponse} from '../services/feedbackService';
+import {Feedback} from '../types/feedback';
 
-export const useFeedback = (userId: number, type: 'received' | 'given' = 'received') => {
-    return useQuery({
-        queryKey: ['feedback', userId, type],
-        queryFn: () => type === 'received' ? feedbackService.getReceivedFeedback(userId) : feedbackService.getGivenFeedback(userId),
+export const useSearchFeedback = (searchRequest: FeedbackSearchRequest) => {
+    return useQuery<PageResponse<Feedback>>({
+        queryKey: ['feedback', 'search', searchRequest],
+        queryFn: () => feedbackService.searchFeedback(searchRequest),
         staleTime: 1000 * 60 * 5,
     });
 };
 
-export const usePendingFeedback = () => {
-    return useQuery({
-        queryKey: ['feedback', 'pending'],
-        queryFn: () => feedbackService.getPendingFeedback(),
-        staleTime: 1000 * 60 * 5,
+/**
+ * Backward compatibility: Get feedback for a specific user
+ * @param userId - User ID to get feedback for
+ * @param type - 'received' or 'given'
+ */
+export const useFeedback = (userId: string, type?: 'received' | 'given', page: number = 0, size: number = 10) => {
+    return useSearchFeedback({
+        userId: type === 'received' ? userId : undefined,
+        fromUserId: type === 'given' ? userId : undefined,
+        page,
+        size,
     });
+};
+
+/**
+ * Backward compatibility: Get pending feedback (for managers)
+ */
+export const usePendingFeedback = (page: number = 0, size: number = 10) => {
+    return useSearchFeedback({ status: 'PENDING', page, size });
 };
 
 export const useSubmitFeedback = () => {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: ({fromUserId, toUserId, content}: { fromUserId: number; toUserId: number; content: string }) =>
+        mutationFn: ({fromUserId, toUserId, content}: { fromUserId: string; toUserId: string; content: string }) =>
             feedbackService.submitFeedback(fromUserId, toUserId, content),
         onSuccess: () => {
             queryClient.invalidateQueries({queryKey: ['feedback']});

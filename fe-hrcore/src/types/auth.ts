@@ -4,14 +4,23 @@
 
 export type UserRole = 'SUPER_ADMIN' | 'MANAGER' | 'EMPLOYEE';
 
+export interface NamedUser {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
 export interface User {
-  id: number;
+  id: string;
   email: string;
   firstName: string;
   lastName: string;
   phone?: string;
   department?: string;
   role: UserRole;
+  managerId?: string;
+  manager?: NamedUser;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -23,7 +32,7 @@ export interface AuthRequest {
 
 export interface AuthResponse {
   token: string;
-  userId: number;
+  userId: string;
   email: string;
   firstName: string;
   lastName: string;

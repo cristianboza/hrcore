@@ -24,7 +24,7 @@ public class JwtUtil {
         return generateToken(user.getId(), user.getEmail(), user.getRole().name(), user.getFirstName(), user.getLastName());
     }
 
-    public String generateToken(Long userId, String email, String role, String firstName, String lastName) {
+    public String generateToken(UUID userId, String email, String role, String firstName, String lastName) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + expiration);
         String jti = UUID.randomUUID().toString();
@@ -62,13 +62,18 @@ public class JwtUtil {
                 .get("role", String.class);
     }
 
-    public Long extractUserId(String token) {
-        return Jwts.parser()
+    public UUID extractUserId(String token) {
+        Object userIdObj = Jwts.parser()
                 .verifyWith(Keys.hmacShaKeyFor(secret.getBytes()))
                 .build()
                 .parseSignedClaims(token)
                 .getPayload()
-                .get("userId", Long.class);
+                .get("userId");
+        
+        if (userIdObj instanceof String) {
+            return UUID.fromString((String) userIdObj);
+        }
+        return (UUID) userIdObj;
     }
 
     public String extractJti(String token) {

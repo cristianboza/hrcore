@@ -1,6 +1,7 @@
 package com.example.hrcore.dto;
 
-import com.example.hrcore.entity.AbsenceRequest;
+import com.example.hrcore.entity.enums.AbsenceRequestStatus;
+import com.example.hrcore.entity.enums.AbsenceRequestType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -15,31 +16,18 @@ import java.time.LocalDateTime;
 @Builder
 public class AbsenceRequestDto {
     private Long id;
-    private Long userId;
+    private NamedUserDto user;
     private LocalDate startDate;
     private LocalDate endDate;
     private String reason;
-    private String type;
-    private String status;
-    private Long approverId;
+    private AbsenceRequestType type;
+    private AbsenceRequestStatus status;
+    private NamedUserDto approver;
     private String rejectionReason;
+    private NamedUserDto createdBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-
-    public static AbsenceRequestDto from(AbsenceRequest request) {
-        return AbsenceRequestDto.builder()
-                .id(request.getId())
-                .userId(request.getUserId())
-                .startDate(request.getStartDate())
-                .endDate(request.getEndDate())
-                .reason(request.getReason())
-                .type(request.getType())
-                .status(request.getStatus())
-                .approverId(request.getApproverId())
-                .rejectionReason(request.getRejectionReason())
-                .createdAt(request.getCreatedAt())
-                .updatedAt(request.getUpdatedAt())
-                .build();
-    }
+    private Boolean canApprove; // Whether current user can approve/reject this request
 }
+
 

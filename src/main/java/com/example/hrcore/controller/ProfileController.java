@@ -1,204 +1,339 @@
 package com.example.hrcore.controller;
 
+import com.example.hrcore.dto.CreateUserRequest;
+import com.example.hrcore.dto.PageResponse;
+import com.example.hrcore.dto.PermissionsDto;
+import com.example.hrcore.dto.ProfileSearchRequest;
+import com.example.hrcore.dto.UserCreationData;
 import com.example.hrcore.dto.UserDto;
+import com.example.hrcore.dto.UserFilterDto;
+import com.example.hrcore.dto.UserOperationContext;
 import com.example.hrcore.entity.User;
-import com.example.hrcore.repository.UserRepository;
-import com.example.hrcore.repository.ValidTokenRepository;
+import com.example.hrcore.entity.enums.UserRole;
+import com.example.hrcore.mapper.UserMapper;
+import com.example.hrcore.security.annotation.RequireAuthenticated;
+import com.example.hrcore.security.annotation.RequireManagerOrAbove;
+import com.example.hrcore.service.AuthenticationService;
 import com.example.hrcore.service.ProfileService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/profiles")
+@RequestMapping("/api/v1/profiles")
 @RequiredArgsConstructor
+@Tag(name = "Profiles", description = "User profile management endpoints")
+@SecurityRequirement(name = "bearer-jwt")
 public class ProfileController {
 
     private final ProfileService profileService;
-    private final ValidTokenRepository validTokenRepository;
-    private final UserRepository userRepository;
+    private final AuthenticationService authenticationService;
+    private final UserMapper userMapper;
 
-    private User extractUserFromAuth(Authentication authentication) {
-        if (authentication == null || authentication.getPrincipal() == null) {
-            log.warn("No authentication or principal found");
-            return null;
-        }
+    @RequireAuthenticated
+    @PostMapping("/search")
+    @Operation(
+        summary = "Search profiles",
+        description = "Search and filter user profiles with pagination. Advanced search by name, email, role, manager, and department."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Successfully retrieved profiles"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content),
+        @ApiResponse(responseCode = "403", description = "Forbidden", content = @Content)
+    })
+    public ResponseEntity<PageResponse<UserDto>> searchProfiles(
+            @Parameter(description = "Search filters and pagination") @Valid @RequestBody ProfileSearchRequest searchRequest,
+            Authentication authentication) {
         
-        String jti = (String) authentication.getPrincipal();
-        log.debug("Extracting user from authentication JTI: {}", jti);
+        User currentUser = authenticationService.getCurrentUser(authentication);
         
-        var validToken = validTokenRepository.findByTokenJti(jti);
-        if (validToken.isEmpty()) {
-            log.warn("No valid token found for JTI: {}", jti);
-            return null;
-        }
+        UserFilterDto filters = UserFilterDto.builder()
+                .search(searchRequest.getSearch())
+                .role(UserRole.fromString(searchRequest.getRole()).orElse(null))
+                .managerId(searchRequest.getManagerId())
+                .department(searchRequest.getDepartment())
+                .build();
         
-        Long userId = validToken.get().getUserId();
-        var user = userRepository.findById(userId);
-        if (user.isEmpty()) {
-            log.warn("No user found for ID: {}", userId);
-            return null;
-        }
+        PageResponse<UserDto> profiles = profileService.searchProfilesPaginated(
+            filters, currentUser.getId(), currentUser.getRole(), 
+            searchRequest.getPage(), searchRequest.getSize()
+        );
         
-        log.info("Successfully extracted user {} from JTI {}", userId, jti);
-        return user.get();
-    }
-
-    /**
-     * Get all profiles (filtered by current user's role)
-     */
-    @PreAuthorize("hasAnyRole('MANAGER','EMPLOYEE','SUPER_ADMIN')")
-    @GetMapping
-    public ResponseEntity<List<UserDto>> getAllProfiles(Authentication authentication) {
-        log.info("GET /api/profiles - Request to get all profiles");
-        User currentUser = extractUserFromAuth(authentication);
-        if (currentUser == null) {
-            log.error("GET /api/profiles - Failed to extract user from authentication");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-
-        log.info("GET /api/profiles - Fetching profiles for user: {} (role: {}) with ID: {}", 
-                currentUser.getEmail(), currentUser.getRole(), currentUser.getId());
-        List<UserDto> profiles = profileService.getAllProfilesFiltered(currentUser.getId(), currentUser.getRole());
-        log.info("GET /api/profiles - Found {} profiles", profiles.size());
+        log.debug("User {} retrieved page {} with {} profiles", 
+            currentUser.getEmail(), searchRequest.getPage(), profiles.getContent().size());
         return ResponseEntity.ok(profiles);
     }
+    
+    @RequireManagerOrAbove
+    @PostMapping
+    @Operation(
+        summary = "Create new profile",
+        description = "Create a new user profile. Requires MANAGER role or above."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "Profile created successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid request data", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content),
+        @ApiResponse(responseCode = "403", description = "Forbidden - requires MANAGER role", content = @Content)
+    })
+    public ResponseEntity<UserDto> createProfile(
+            @Parameter(description = "User creation data") @Valid @RequestBody CreateUserRequest request,
+            Authentication authentication) {
+        
+        User currentUser = authenticationService.getCurrentUser(authentication);
+        
+        UserRole role = UserRole.fromString(request.getRole()).orElse(UserRole.EMPLOYEE);
+        UUID managerId = null;
+        
+        // Only parse managerId if it's not null or empty
+        if (request.getManagerId() != null && !request.getManagerId().trim().isEmpty()) {
+            try {
+                managerId = UUID.fromString(request.getManagerId());
+            } catch (IllegalArgumentException e) {
+                log.warn("Invalid managerId format: {}", request.getManagerId());
+            }
+        }
+        
+        // Build user creation data
+        UserCreationData userData = UserCreationData.builder()
+                .email(request.getEmail())
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .password(request.getPassword())
+                .phone(request.getPhone())
+                .department(request.getDepartment())
+                .role(role)
+                .managerId(managerId)
+                .build();
+        
+        // Build operation context
+        UserOperationContext context = UserOperationContext.builder()
+                .currentUserId(currentUser.getId())
+                .currentUserRole(currentUser.getRole())
+                .build();
+        
+        UserDto createdUser = profileService.createUser(userData, context);
+        
+        log.info("Profile created: {} by {}", createdUser.getEmail(), currentUser.getEmail());
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdUser);
+    }
 
-    /**
-     * Get a specific profile (with role-based filtering)
-     */
-    @PreAuthorize("hasAnyRole('MANAGER', 'EMPLOYEE', 'SUPER_ADMIN')")
+    @RequireAuthenticated
     @GetMapping("/{userId}")
+    @Operation(
+        summary = "Get profile by ID",
+        description = "Retrieve a specific user profile by ID. Access depends on user role."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Profile retrieved successfully"),
+        @ApiResponse(responseCode = "404", description = "Profile not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content),
+        @ApiResponse(responseCode = "403", description = "Forbidden", content = @Content)
+    })
     public ResponseEntity<UserDto> getProfile(
-            @PathVariable Long userId,
+            @Parameter(description = "User ID") @PathVariable UUID userId,
             Authentication authentication) {
-
-        log.info("GET /api/profiles/{} - Request to get profile", userId);
-        User currentUser = extractUserFromAuth(authentication);
-        if (currentUser == null) {
-            log.error("GET /api/profiles/{} - Failed to extract user from authentication", userId);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-
-        log.info("GET /api/profiles/{} - Fetching for current user: {} (role: {})", userId, currentUser.getId(), currentUser.getRole());
-        UserDto profile = profileService.getProfileWithRoleFiltering(userId, currentUser.getId(), currentUser.getRole());
-
-        if (profile == null) {
-            log.warn("GET /api/profiles/{} - Profile not found or access denied", userId);
-            return ResponseEntity.notFound().build();
-        }
-
-        log.info("GET /api/profiles/{} - Profile found and returned", userId);
-        return ResponseEntity.ok(profile);
+        
+        User currentUser = authenticationService.getCurrentUser(authentication);
+        
+        return profileService.getProfileWithRoleFiltering(userId, currentUser.getId(), currentUser.getRole())
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
-    /**
-     * Update a profile (only owner or manager)
-     */
-    @PreAuthorize("hasAnyRole('MANAGER', 'EMPLOYEE', 'SUPER_ADMIN')")
+    @RequireAuthenticated
     @PutMapping("/{userId}")
+    @Operation(
+        summary = "Update profile",
+        description = "Update a user profile. Users can update their own profile, managers can update their team members."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Profile updated successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid request data", content = @Content),
+        @ApiResponse(responseCode = "404", description = "Profile not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content),
+        @ApiResponse(responseCode = "403", description = "Forbidden", content = @Content)
+    })
     public ResponseEntity<UserDto> updateProfile(
-            @PathVariable Long userId,
-            @RequestBody UserDto userDto,
+            @Parameter(description = "User ID") @PathVariable UUID userId,
+            @Parameter(description = "Updated profile data") @Valid @RequestBody UserDto userDto,
             Authentication authentication) {
 
-        log.info("PUT /api/profiles/{} - Request to update profile", userId);
-        User currentUser = extractUserFromAuth(authentication);
-        if (currentUser == null) {
-            log.error("PUT /api/profiles/{} - Failed to extract user from authentication", userId);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-
-        try {
-            log.info("PUT /api/profiles/{} - Updating for current user: {} (role: {})", userId, currentUser.getId(), currentUser.getRole());
-            UserDto updatedProfile = profileService.updateProfile(userId, currentUser.getId(), currentUser.getRole(), userDto);
-            log.info("PUT /api/profiles/{} - Profile updated successfully", userId);
-            return ResponseEntity.ok(updatedProfile);
-        } catch (SecurityException e) {
-            log.warn("PUT /api/profiles/{} - Security exception: {}", userId, e.getMessage());
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(null);
-        } catch (IllegalArgumentException e) {
-            log.warn("PUT /api/profiles/{} - Argument exception: {}", userId, e.getMessage());
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
-        }
+        User currentUser = authenticationService.getCurrentUser(authentication);
+        UserDto updatedProfile = profileService.updateProfile(
+            userId, currentUser.getId(), currentUser.getRole(), userDto
+        );
+        
+        log.info("Profile updated: {} by {}", userId, currentUser.getEmail());
+        return ResponseEntity.ok(updatedProfile);
     }
 
-    /**
-     * Delete a profile (only managers)
-     */
+    @RequireManagerOrAbove
     @DeleteMapping("/{userId}")
-    public ResponseEntity<?> deleteProfile(
-            @PathVariable Long userId,
+    @Operation(
+        summary = "Delete profile",
+        description = "Delete a user profile. Requires MANAGER role or above."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "204", description = "Profile deleted successfully"),
+        @ApiResponse(responseCode = "404", description = "Profile not found", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content),
+        @ApiResponse(responseCode = "403", description = "Forbidden - requires MANAGER role", content = @Content)
+    })
+    public ResponseEntity<Void> deleteProfile(
+            @Parameter(description = "User ID") @PathVariable UUID userId,
             Authentication authentication) {
-
-        log.info("DELETE /api/profiles/{} - Request to delete profile", userId);
-        User currentUser = extractUserFromAuth(authentication);
-        if (currentUser == null) {
-            log.error("DELETE /api/profiles/{} - Failed to extract user from authentication", userId);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-
-        try {
-            log.info("DELETE /api/profiles/{} - Deleting for current user: {} (role: {})", userId, currentUser.getId(), currentUser.getRole());
-            profileService.deleteProfile(userId, currentUser.getId(), currentUser.getRole());
-            log.info("DELETE /api/profiles/{} - Profile deleted successfully", userId);
-            return ResponseEntity.noContent().build();
-        } catch (SecurityException e) {
-            log.warn("DELETE /api/profiles/{} - Security exception: {}", userId, e.getMessage());
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Permission denied: " + e.getMessage());
-        }
+        
+        User currentUser = authenticationService.getCurrentUser(authentication);
+        profileService.deleteProfile(userId, currentUser.getId(), currentUser.getRole());
+        
+        log.warn("Profile deleted: {} by {}", userId, currentUser.getEmail());
+        return ResponseEntity.noContent().build();
     }
 
-    /**
-     * Check permissions for a profile
-     */
+    @RequireAuthenticated
     @GetMapping("/{userId}/permissions")
-    public ResponseEntity<?> getProfilePermissions(
-            @PathVariable Long userId,
+    @Operation(
+        summary = "Get profile permissions",
+        description = "Get what actions the current user can perform on the specified profile"
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Permissions retrieved successfully"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content)
+    })
+    public ResponseEntity<PermissionsDto> getProfilePermissions(
+            @Parameter(description = "User ID") @PathVariable UUID userId,
             Authentication authentication) {
 
-        log.info("GET /api/profiles/{}/permissions - Request to check permissions", userId);
-        User currentUser = extractUserFromAuth(authentication);
-        if (currentUser == null) {
-            log.error("GET /api/profiles/{}/permissions - Failed to extract user from authentication", userId);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-
-        log.info("GET /api/profiles/{}/permissions - Checking for current user: {} (role: {})", userId, currentUser.getId(), currentUser.getRole());
-        return ResponseEntity.ok(new PermissionsDto(
-                profileService.canViewAllData(userId, currentUser.getId(), currentUser.getRole()),
-                profileService.canEditProfile(userId, currentUser.getId(), currentUser.getRole()),
-                profileService.canDeleteProfile(userId, currentUser.getId(), currentUser.getRole())
-        ));
+        User currentUser = authenticationService.getCurrentUser(authentication);
+        
+        PermissionsDto permissions = PermissionsDto.builder()
+                .canViewAll(profileService.canViewAllData(userId, currentUser.getId(), currentUser.getRole()))
+                .canEdit(profileService.canEditProfile(userId, currentUser.getId(), currentUser.getRole()))
+                .canDelete(profileService.canDeleteProfile(userId, currentUser.getId(), currentUser.getRole()))
+                .canGiveFeedback(true) // Anyone can give feedback to anyone
+                .canRequestAbsence(true) // Anyone can request absence for anyone (managers for others, employees for self)
+                .build();
+        
+        return ResponseEntity.ok(permissions);
     }
 
-    /**
-     * Get current authenticated user
-     */
+    @RequireAuthenticated
     @GetMapping("/me")
+    @Operation(
+        summary = "Get current user profile",
+        description = "Retrieve the profile of the currently authenticated user"
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Current user profile retrieved successfully"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content)
+    })
     public ResponseEntity<UserDto> getCurrentUser(Authentication authentication) {
-        log.info("GET /api/profiles/me - Request to get current user");
-        User currentUser = extractUserFromAuth(authentication);
-        if (currentUser == null) {
-            log.error("GET /api/profiles/me - Failed to extract user from authentication");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        log.info("GET /api/profiles/me - Returning user: {} ({})", currentUser.getId(), currentUser.getEmail());
-        return ResponseEntity.ok(UserDto.from(currentUser));
+        User currentUser = authenticationService.getCurrentUser(authentication);
+        return ResponseEntity.ok(userMapper.toDto(currentUser));
     }
 
-    @lombok.Data
-    @lombok.AllArgsConstructor
-    public static class PermissionsDto {
-        private boolean canViewAll;
-        private boolean canEdit;
-        private boolean canDelete;
+    @RequireAuthenticated
+    @GetMapping("/{userId}/direct-reports")
+    @Operation(
+        summary = "Get direct reports",
+        description = "Get list of users who directly report to the specified user"
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Direct reports retrieved successfully"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content),
+        @ApiResponse(responseCode = "403", description = "Forbidden", content = @Content)
+    })
+    public ResponseEntity<List<UserDto>> getDirectReports(
+            @Parameter(description = "User ID") @PathVariable UUID userId,
+            Authentication authentication) {
+        
+        List<UserDto> directReports = profileService.getDirectReports(userId);
+        log.debug("Retrieved {} direct reports for user {}", directReports.size(), userId);
+        return ResponseEntity.ok(directReports);
     }
+
+    @RequireManagerOrAbove
+    @GetMapping("/available-managers")
+    public ResponseEntity<List<UserDto>> getAvailableManagers() {
+        return ResponseEntity.ok(profileService.getAvailableManagers());
+    }
+
+    @RequireAuthenticated
+    @GetMapping("/{userId}/manager")
+    public ResponseEntity<UserDto> getManager(@PathVariable UUID userId) {
+        return profileService.getManagerOf(userId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @RequireManagerOrAbove
+    @PutMapping("/{userId}/manager/{managerId}")
+    public ResponseEntity<Void> assignManager(
+            @PathVariable UUID userId,
+            @PathVariable UUID managerId,
+            Authentication authentication) {
+        
+        User currentUser = authenticationService.getCurrentUser(authentication);
+        profileService.assignManager(userId, managerId, currentUser.getId(), currentUser.getRole());
+        
+        log.info("Manager assigned: {} → {} by {}", managerId, userId, currentUser.getEmail());
+        return ResponseEntity.ok().build();
+    }
+
+    @RequireAuthenticated
+    @PostMapping("/{userId}/feedback/search")
+    @Operation(
+        summary = "Get feedback for a specific user",
+        description = "Get feedback for a user on their profile. Visibility rules: " +
+                     "- Own user sees all APPROVED feedback received " +
+                     "- Direct manager/Admin sees ALL feedback (pending, approved, rejected) " +
+                     "- Other users see only feedback they gave to this user"
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Feedback retrieved successfully"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content),
+        @ApiResponse(responseCode = "403", description = "Forbidden", content = @Content)
+    })
+    public ResponseEntity<PageResponse<com.example.hrcore.dto.FeedbackDto>> getUserFeedback(
+            @Parameter(description = "User ID to get feedback for") @PathVariable UUID userId,
+            @Parameter(description = "Search filters") @RequestBody com.example.hrcore.dto.FeedbackSearchRequest searchRequest,
+            Authentication authentication) {
+        
+        User currentUser = authenticationService.getCurrentUser(authentication);
+        
+        // Delegate to service with proper context
+        com.example.hrcore.dto.FeedbackOperationContext context = com.example.hrcore.dto.FeedbackOperationContext.builder()
+                .currentUserId(currentUser.getId())
+                .currentUserRole(currentUser.getRole())
+                .page(searchRequest.getPage())
+                .size(searchRequest.getSize())
+                .sortBy(searchRequest.getSortBy())
+                .sortDirection(searchRequest.getSortDirection())
+                .build();
+        
+        PageResponse<com.example.hrcore.dto.FeedbackDto> feedback = 
+            profileService.getUserFeedback(userId, searchRequest.getStatus(), context);
+        
+        log.debug("User {} retrieved {} feedback items for user {}", 
+            currentUser.getEmail(), feedback.getContent().size(), userId);
+        return ResponseEntity.ok(feedback);
+    }
+
 }

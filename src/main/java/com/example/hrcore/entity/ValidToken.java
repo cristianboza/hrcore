@@ -1,12 +1,15 @@
 package com.example.hrcore.entity;
 
+import com.example.hrcore.entity.enums.UserRole;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "valid_tokens")
@@ -14,6 +17,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@EqualsAndHashCode(of = "tokenJti")
 public class ValidToken {
 
     @Id
@@ -24,10 +28,17 @@ public class ValidToken {
     private String tokenJti;
 
     @Column(nullable = false)
-    private Long userId;
+    private UUID userId;
+    
+    @Column(nullable = false, length = 50)
+    @Enumerated(EnumType.STRING)
+    private UserRole userRole;
 
     @Column(nullable = false)
     private String keycloakSubject;
+    
+    @Column(length = 2000)
+    private String idToken;
 
     @Column(nullable = false)
     private LocalDateTime issuedAt;

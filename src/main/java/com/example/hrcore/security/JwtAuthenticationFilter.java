@@ -1,5 +1,6 @@
 package com.example.hrcore.security;
 
+import com.example.hrcore.repository.ValidTokenRepository;
 import com.example.hrcore.service.TokenService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -18,8 +19,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
-import java.util.Map;
 
 @Slf4j
 @Component
@@ -28,6 +27,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final TokenService tokenService;
     private final JwtDecoder jwtDecoder;
+    private final ValidTokenRepository validTokenRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
@@ -61,8 +61,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     return;
                 }
                 
-                log.info("Token is valid, extracting authorities from JWT claims");
-                Collection<GrantedAuthority> authorities = extractAuthorities(token);
+                log.info("Token is valid, extracting authorities from token");
+                Collection<GrantedAuthority> authorities = extractAuthoritiesFromToken(jti);
                 log.info("Extracted {} authorities: {}", authorities.size(), authorities);
                 
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
@@ -83,38 +83,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    private Collection<GrantedAuthority> extractAuthorities(String token) {
+    private Collection<GrantedAuthority> extractAuthoritiesFromToken(String jti) {
         Collection<GrantedAuthority> authorities = new ArrayList<>();
         try {
-            log.debug("Decoding JWT token to extract authorities");
-            var jwt = jwtDecoder.decode(token);
-            log.debug("JWT decoded successfully - claims: {}", jwt.getClaims().keySet());
+            log.debug("Loading role from ValidToken using JTI: {}", jti);
             
-            @SuppressWarnings("unchecked")
-            Map<String, Object> realmAccess = (Map<String, Object>) jwt.getClaims().get("realm_access");
-            log.debug("realm_access claim: {}", realmAccess);
-            
-            if (realmAccess != null) {
-                @SuppressWarnings("unchecked")
-                List<String> roles = (List<String>) realmAccess.get("roles");
-                log.info("Roles from realm_access: {}", roles);
-                
-                if (roles != null && !roles.isEmpty()) {
-                    for (String role : roles) {
-                        String authority = "ROLE_" + role.toUpperCase();
-                        authorities.add(new SimpleGrantedAuthority(authority));
-                        log.info("Added authority: {}", authority);
-                    }
-                } else {
-                    log.warn("No roles found in realm_access claim");
-                }
-            } else {
-                log.warn("realm_access claim not found in JWT");
-            }
+            validTokenRepository.findByTokenJti(jti).ifPresentOrElse(
+                validToken -> {
+                    String role = validToken.getUserRole().name();
+                    String authority = "ROLE_" + role;
+                    authorities.add(new SimpleGrantedAuthority(authority));
+                    log.info("Loaded role from token - Role: {}, Authority: {}", role, authority);
+                },
+                () -> log.warn("No valid token found for JTI: {}", jti)
+            );
         } catch (Exception e) {
-            log.error("Error extracting authorities from token: {}", e.getMessage(), e);
+            log.error("Error extracting authorities from token for JTI {}: {}", jti, e.getMessage(), e);
         }
-        log.info("Total authorities extracted: {}", authorities.size());
+        log.info("Total authorities extracted from token: {}", authorities.size());
         return authorities;
     }
 

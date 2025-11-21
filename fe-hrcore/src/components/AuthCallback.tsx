@@ -17,7 +17,8 @@ export const AuthCallback = () => {
         if (!code) {
           const hash = window.location.hash;
           const params = new URLSearchParams(hash.substring(1));
-          code = params.get('code');
+            console.log(JSON.stringify(params));
+            code = params.get('code');
         }
         
         if (!code) {

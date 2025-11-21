@@ -1,28 +1,42 @@
 package com.example.hrcore.entity;
 
+import com.example.hrcore.entity.enums.AbsenceRequestStatus;
+import com.example.hrcore.entity.enums.AbsenceRequestType;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
+import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
-@Table(name = "absence_requests")
+@Table(name = "absence_requests", indexes = {
+    @Index(name = "idx_absence_user", columnList = "userId"),
+    @Index(name = "idx_absence_status", columnList = "status"),
+    @Index(name = "idx_absence_start_date", columnList = "startDate"),
+    @Index(name = "idx_absence_created_by", columnList = "created_by"),
+    @Index(name = "idx_absence_approver", columnList = "approverId"),
+    @Index(name = "idx_absence_user_status", columnList = "userId,status"),
+    @Index(name = "idx_absence_dates", columnList = "startDate,endDate")
+})
 @Data
+@EqualsAndHashCode(callSuper = false)
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class AbsenceRequest {
+@SuperBuilder
+public class AbsenceRequest extends Auditable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false)
-    private Long userId;
+    private UUID userId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "userId", referencedColumnName = "id", insertable = false, updatable = false)
+    private User user;
 
     @Column(nullable = false)
     private LocalDate startDate;
@@ -33,32 +47,24 @@ public class AbsenceRequest {
     @Column(columnDefinition = "TEXT")
     private String reason;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private String type; // VACATION, SICK, OTHER
+    private AbsenceRequestType type;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private String status; // PENDING, APPROVED, REJECTED
+    private AbsenceRequestStatus status;
 
-    private Long approverId;
+    private UUID approverId;
 
     @Column(columnDefinition = "TEXT")
     private String rejectionReason;
 
     @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    private UUID createdById;
 
-    @Column(nullable = false)
-    private LocalDateTime updatedAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "createdById", referencedColumnName = "id", insertable = false, updatable = false)
+    private User requestCreator;
 }
 

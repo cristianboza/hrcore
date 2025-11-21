@@ -1,216 +1,305 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useState } from 'react';
-import { useProfile, useUpdateProfile } from '../hooks/useProfile';
-import { useAuthStore } from '../store/authStore';
-import { User } from '../services/userService';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useTranslation } from 'react-i18next';
+import { 
+  useProfile, 
+  useUpdateProfile, 
+  useAvailableManagers,
+  useAssignManager,
+  useRemoveManager
+} from '@/hooks/useProfile';
+import { useAuthStore } from '@/store/authStore';
+import { profileEditSchema, ProfileEditFormData } from '@/schemas/profileSchema';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 
 export const ProfileEdit: React.FC = () => {
+  const { t } = useTranslation();
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
   const currentUser = useAuthStore((state) => state.currentUser);
   const { mutate: updateProfile, isPending } = useUpdateProfile();
+  const { mutate: assignManager } = useAssignManager();
+  const { mutate: removeManager } = useRemoveManager();
 
-  const id = userId ? parseInt(userId, 10) : 0;
-  const { data: profile, isLoading, error } = useProfile(id);
+  const { data: profile, isLoading, error } = useProfile(userId);
+  const { data: availableManagers } = useAvailableManagers();
 
-  const [formData, setFormData] = useState<Partial<User>>({
-    firstName: profile?.firstName || '',
-    lastName: profile?.lastName || '',
-    email: profile?.email || '',
-    phone: profile?.phone || '',
-    department: profile?.department || '',
-    role: profile?.role || 'EMPLOYEE',
+  const form = useForm<ProfileEditFormData>({
+    resolver: zodResolver(profileEditSchema),
+    defaultValues: {
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      department: '',
+      role: 'EMPLOYEE',
+      managerId: null,
+    },
   });
 
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  useEffect(() => {
+    if (profile) {
+      form.reset({
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        email: profile.email,
+        phone: profile.phone || '',
+        department: profile.department || '',
+        role: profile.role as 'EMPLOYEE' | 'MANAGER' | 'SUPER_ADMIN',
+        managerId: profile.managerId || null,
+      });
+    }
+  }, [profile, form]);
 
-  // Update form data when profile loads
-  if (profile && (formData.firstName !== profile.firstName)) {
-    setFormData({
-      firstName: profile.firstName,
-      lastName: profile.lastName,
-      email: profile.email,
-      phone: profile.phone,
-      department: profile.department,
-      role: profile.role,
-    });
-  }
+  const onSubmit = (data: ProfileEditFormData) => {
+    if (!userId) return;
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitError(null);
+    const { managerId, email, ...profileData } = data;
 
     updateProfile(
       {
-        userId: id,
-        updateData: formData,
+        userId: userId,
+        updateData: profileData,
       },
       {
         onSuccess: () => {
-          navigate(`/profiles/${id}`);
+          const currentManagerId = profile?.managerId || null;
+          
+          if (managerId !== currentManagerId) {
+            if (managerId === null) {
+              removeManager(userId, {
+                onSuccess: () => navigate(`/profiles/${userId}`),
+                onError: (error) => console.error('Failed to update manager:', error),
+              });
+            } else if (managerId !== undefined) {
+              assignManager(
+                { userId: userId, managerId: managerId },
+                {
+                  onSuccess: () => navigate(`/profiles/${userId}`),
+                  onError: (error) => console.error('Failed to assign manager:', error),
+                }
+              );
+            }
+          } else {
+            navigate(`/profiles/${userId}`);
+          }
         },
         onError: (error) => {
-          setSubmitError(error instanceof Error ? error.message : 'Failed to update profile');
+          console.error('Failed to update profile:', error);
         },
       }
     );
   };
 
-  // Security: Only allow edit if currentUser is owner, manager, or super admin
-  if (!currentUser || (currentUser.id !== id && currentUser.role !== 'MANAGER' && currentUser.role !== 'SUPER_ADMIN')) {
+  if (!currentUser || !userId || (currentUser.id !== userId && currentUser.role !== 'MANAGER' && currentUser.role !== 'SUPER_ADMIN')) {
     return (
-      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-        You do not have permission to edit this profile.
-      </div>
+      <Alert variant="destructive">
+        <AlertDescription>
+          {t('common.error')}: You do not have permission to edit this profile.
+        </AlertDescription>
+      </Alert>
     );
   }
 
   if (isLoading) {
     return (
       <div className="flex justify-center items-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <span className="ml-2">{t('common.loading')}</span>
       </div>
     );
   }
 
   if (error || !profile) {
     return (
-      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-        Error loading profile: {error instanceof Error ? error.message : 'Profile not found'}
-      </div>
+      <Alert variant="destructive">
+        <AlertDescription>
+          {t('profile.loadError')}: {error instanceof Error ? error.message : 'Profile not found'}
+        </AlertDescription>
+      </Alert>
     );
   }
 
+  const isManagerOrAbove = currentUser.role === 'MANAGER' || currentUser.role === 'SUPER_ADMIN';
+
   return (
-    <div className="max-w-2xl mx-auto">
-      <Link to={`/profiles/${id}`} className="text-blue-600 hover:text-blue-800 mb-4 inline-block">
-        ← Back to Profile
-      </Link>
+    <div className="max-w-2xl mx-auto p-6">
+      <Button variant="ghost" asChild className="mb-4">
+        <Link to={`/profiles/${userId}`}>← {t('common.back')}</Link>
+      </Button>
 
-      <div className="bg-white rounded-lg shadow p-8">
-        <h1 className="text-3xl font-bold mb-6">Edit Profile</h1>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-3xl">{t('profile.editProfile')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <div className="grid grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="firstName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('profile.firstName')} *</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-        {submitError && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-            {submitError}
-          </div>
-        )}
+                <FormField
+                  control={form.control}
+                  name="lastName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('profile.lastName')} *</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-2 gap-6">
-            {/* First Name */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">First Name *</label>
-              <input
-                type="text"
-                name="firstName"
-                value={formData.firstName || ''}
-                onChange={handleInputChange}
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('profile.email')} *</FormLabel>
+                    <FormControl>
+                      <Input {...field} disabled />
+                    </FormControl>
+                    <FormDescription>Email cannot be changed</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
 
-            {/* Last Name */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Last Name *</label>
-              <input
-                type="text"
-                name="lastName"
-                value={formData.lastName || ''}
-                onChange={handleInputChange}
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('profile.phoneNumber')}</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="+1-555-1234" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-          {/* Email */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Email *</label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email || ''}
-              onChange={handleInputChange}
-              required
-              disabled
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
-            />
-            <p className="text-sm text-gray-600 mt-1">Email cannot be changed</p>
-          </div>
+                <FormField
+                  control={form.control}
+                  name="department"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('profile.department')}</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="Engineering" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
-          <div className="grid grid-cols-2 gap-6">
-            {/* Phone */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Phone</label>
-              <input
-                type="tel"
-                name="phone"
-                value={formData.phone || ''}
-                onChange={handleInputChange}
-                placeholder="+1-555-1234"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+              {isManagerOrAbove && (
+                <FormField
+                  control={form.control}
+                  name="role"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('profile.role')}</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="EMPLOYEE">{t('roles.EMPLOYEE')}</SelectItem>
+                          <SelectItem value="MANAGER">{t('roles.MANAGER')}</SelectItem>
+                          {currentUser.role === 'SUPER_ADMIN' && (
+                            <SelectItem value="SUPER_ADMIN">{t('roles.SUPER_ADMIN')}</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
-            {/* Department */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Department</label>
-              <input
-                type="text"
-                name="department"
-                value={formData.department || ''}
-                onChange={handleInputChange}
-                placeholder="Engineering"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
+              {isManagerOrAbove && (form.watch('role') === 'MANAGER' || form.watch('role') === 'EMPLOYEE') && (
+                <FormField
+                  control={form.control}
+                  name="managerId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('profile.manager')}</FormLabel>
+                      <Select 
+                        onValueChange={(value) => field.onChange(value === 'none' ? null : value)}
+                        value={field.value || 'none'}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder={t('profile.noManager')} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">{t('profile.noManager')}</SelectItem>
+                          {availableManagers?.map((manager) => (
+                            <SelectItem key={manager.id} value={manager.id}>
+                              {manager.firstName} {manager.lastName} ({manager.email})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        {form.watch('role') === 'MANAGER' 
+                          ? 'Assign this manager to report to another manager (optional)' 
+                          : 'Assign a manager for this employee'}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
-          {/* Role - Only editable by managers and super admin */}
-          {(currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'MANAGER') && (
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Role</label>
-              <select
-                name="role"
-                value={formData.role || 'EMPLOYEE'}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="EMPLOYEE">Employee</option>
-                <option value="MANAGER">Manager</option>
-                <option value="SUPER_ADMIN">Super Admin</option>
-              </select>
-            </div>
-          )}
-
-          {/* Submit Buttons */}
-          <div className="flex gap-4 border-t pt-6">
-            <button
-              type="submit"
-              disabled={isPending}
-              className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isPending ? 'Saving...' : 'Save Changes'}
-            </button>
-            <Link
-              to={`/profiles/${id}`}
-              className="bg-gray-400 text-white px-6 py-2 rounded hover:bg-gray-500 transition"
-            >
-              Cancel
-            </Link>
-          </div>
-        </form>
-      </div>
+              <div className="flex gap-4 pt-6 border-t">
+                <Button type="submit" disabled={form.formState.isSubmitting || isPending}>
+                  {form.formState.isSubmitting || isPending ? t('common.loading') : t('common.save')}
+                </Button>
+                <Button type="button" variant="outline" asChild>
+                  <Link to={`/profiles/${userId}`}>{t('common.cancel')}</Link>
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
     </div>
   );
 };

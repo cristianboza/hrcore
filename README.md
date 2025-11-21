@@ -1,6 +1,6 @@
 # HR Core - Employee Profile Management System
 
-Secure employee profile management system with Keycloak OAuth2 authentication, JWT token persistence, role-based access control, and admin session management.
+Full-stack HR application with OAuth2 authentication, role-based access control, AI-powered feedback, and admin session management.
 
 ## Quick Start
 
@@ -11,126 +11,224 @@ chmod +x build-and-deploy.sh
 
 **Services:**
 - Frontend: http://localhost:3000
-- Backend: http://localhost:8080
+- Backend API: http://localhost:8080
+- API Docs (Swagger): http://localhost:8080/swagger-ui.html
 - Keycloak: http://localhost:9080
 
 **Test Credentials:**
 | Username | Password | Role |
 |----------|----------|------|
 | admin | admin123 | Super Admin |
-| manager | manager123 | Manager |
-| employee1 | employee123 | Employee |
-| employee2 | employee123 | Employee |
+| manager1 | manager123 | Manager (Engineering) |
+| manager2 | manager123 | Manager (Sales) |
+| employee1 | employee123 | Employee (Engineering) |
+| employee5 | employee123 | Employee (Sales) |
 
-## What's Implemented
-
-✅ **Backend**
-- Keycloak OAuth2/OIDC authentication
-- JWT bearer token validation
-- Token storage & persistence in PostgreSQL
-- Role-based access control (SUPER_ADMIN, MANAGER, EMPLOYEE)
-- Admin session management with force logout
-- Employee profiles with field-level access control
-- Absence request management
-- Feedback system
-
-✅ **Frontend**
-- React 18 + TypeScript (no `any` types)
-- Zustand state management
-- OAuth2 code flow integration
-- Admin dashboard for session management
-- Responsive UI with Tailwind CSS
-
-✅ **Security**
-- Bearer token on all protected endpoints
-- Token invalidation mechanism
-- Automatic logout for invalid/expired tokens
-- Database-validated token checking
-- Role-based endpoint protection
+---
 
 ## Tech Stack
 
-- Backend: Spring Boot 3.5.7, Spring Security 6.5.6
-- Frontend: React 18, TypeScript, Zustand, Tailwind CSS
-- Auth: Keycloak 26.0.0 (OIDC/OAuth2)
-- Database: PostgreSQL 15 with Flyway migrations
-- Deployment: Docker Compose, Nginx
+**Backend:**
+- Spring Boot 3.5.7 + Spring Security 6.5.6
+- PostgreSQL 15 + Flyway migrations
+- Keycloak 26.0.0 (OAuth2/OIDC)
+- QueryDSL 5.1.0 (type-safe queries)
+- MapStruct 1.6.3 (DTO mapping)
+- SpringDoc OpenAPI 2.7.0 (Swagger)
+- Bucket4j 8.10.1 (rate limiting)
+- Caffeine (caching)
+- Actuator + Prometheus (metrics)
 
-## Features by Role
+**Frontend:**
+- React 19.2.0 + TypeScript 5.9.3 (zero `any` types)
+- Zustand 4.4.1 (state management)
+- TanStack Query 5.28.0 (server state)
+- React Hook Form 7.66.1 + Zod 4.1.12 (validation)
+- Tailwind CSS 3.4.1 + Radix UI
+- Vite (build tool)
+- i18next (internationalization)
 
-**Super Admin**: View all profiles, edit all data, manage active sessions, force logout
+**Infrastructure:**
+- Docker Compose orchestration
+- Nginx reverse proxy
+- Multi-stage Docker builds
 
-**Manager**: View all profiles, approve/deny absences, leave feedback
+---
 
-**Employee**: View own profile (R/W), view others' public data (R/O), request absences, leave feedback
+## Core Features
 
-## Project Structure
+### ✅ Employee Profiles
+- Role-based view/edit permissions (owner, manager, coworker)
+- Field-level access control (sensitive vs. public data)
+- Search & filtering with pagination
+- Organizational hierarchy (manager-employee relationships)
+- Department-based organization
+
+### ✅ Feedback System
+- Submit feedback to any employee
+- **AI-powered polishing** (HuggingFace API, feature-flagged)
+- Manager approval workflow (PENDING → APPROVED/REJECTED)
+- Advanced search with filters
+- Only approved feedback visible to recipient
+
+### ✅ Absence Requests
+- Submit absence requests with date ranges
+- Manager approval/rejection workflow
+- Conflict detection
+- Direct manager authorization only
+
+### ✅ Admin Session Management
+- View active sessions (Super Admin only)
+- Force logout any user
+- Real-time session tracking
+
+### ✅ Security & Authentication
+- OAuth2 Authorization Code Flow
+- JWT bearer token validation
+- Token persistence & invalidation in database
+- Multi-layer authorization (annotations + service + context)
+- Automatic logout on token expiry
+- 3-tier RBAC (Super Admin, Manager, Employee)
+
+### ✅ Feature Flags
+- Centralized feature flag system (backend + frontend)
+- AOP-based enforcement with `@RequireFeature` annotation
+- Environment-driven configuration
+- Type-safe constants across stack
+
+---
+
+## Architecture
 
 ```
 hrcore/
-├── src/main/java/              # Backend (Spring Boot)
-├── fe-hrcore/                  # Frontend (React + TypeScript)
-├── keycloak-realm.json         # Keycloak realm config
-├── docker-compose.yml          # Service orchestration
-└── build-and-deploy.sh         # Deploy script
+├── src/main/java/com/example/hrcore/
+│   ├── controller/          # REST endpoints with OpenAPI docs
+│   ├── service/             # Business logic with transactions
+│   ├── repository/          # JPA repositories with QueryDSL
+│   ├── entity/              # Domain models with relationships
+│   ├── dto/                 # Data transfer objects
+│   ├── mapper/              # MapStruct DTO converters
+│   ├── security/            # Custom security aspects & filters
+│   ├── config/              # Feature flags, security, OpenAPI
+│   └── specification/       # QueryDSL query specifications
+├── src/main/resources/
+│   └── db/migration/        # Flyway SQL migrations (11 files)
+├── fe-hrcore/src/
+│   ├── components/          # React components
+│   ├── hooks/               # Custom hooks (useFeatureFlags, useProfile)
+│   ├── services/            # API clients (TypeScript)
+│   ├── types/               # TypeScript type definitions
+│   ├── store/               # Zustand state stores
+│   └── i18n/                # Internationalization config
+└── docker-compose.yml       # Full stack orchestration
 ```
 
-## Future Improvements
+**Design Principles:**
+- **Clean Architecture:** Controller → Service → Repository pattern
+- **Security:** Multi-layer authorization (annotations + service logic + context objects)
+- **Type Safety:** MapStruct (compile-time) + QueryDSL (type-safe queries) + TypeScript (zero `any`)
+- **Testability:** Dependency injection, context objects for operations
+- **Database Versioning:** 11 Flyway migrations for schema evolution
 
-### Backend Improvements
+### Why Monolith Over Microservices?
 
-**Security & Authentication**
-- [ ] Refresh token rotation for enhanced security
-- [ ] OAuth2 password reset flows and email verification
-- [ ] Rate limiting with Bucket4j on API endpoints
-- [ ] API versioning (`/api/v1`, `/api/v2`)
+**Chosen:** Modular monolith with clean boundaries  
+**Not Chosen:** Microservices architecture
 
-**Data Validation & Error Handling**
-- [ ] Input validation with `@Valid` on DTOs and request bodies
-- [ ] Global exception handler with `@ControllerAdvice`
-- [ ] Custom error response format with error codes
+**Reasoning:**
+- **Domain Scope:** HR core features are highly cohesive (profiles, feedback, absences share user context)
+- **Data Consistency:** Strong transactional boundaries needed (e.g., absence approval + notification in one transaction)
+- **Team Size:** Single full-stack developer - microservices add operational overhead without benefit
+- **Deployment Complexity:** No need for independent scaling of services at this stage
+- **Development Velocity:** Monolith enables faster iteration, easier debugging, single deployment
+- **Cost:** One database, one runtime, simpler infrastructure (vs. service mesh, API gateway, distributed tracing)
 
-**Performance & Scalability**
-- [ ] Redis caching layer with `@Cacheable` for profile lookups
-- [ ] Pagination support with `Pageable` on list endpoints
-- [ ] Database connection pooling optimization (HikariCP tuning)
-- [ ] Query optimization with database indexes
+**Migration Path:** Modular design with clear package boundaries enables future extraction to microservices if needed (e.g., separate notification service, analytics service). Current structure supports vertical slicing by domain.
 
-**Data Management**
-- [ ] Optimistic locking with `@Version` for concurrent profile updates
-- [ ] Audit logging for admin actions (Spring Data Envers)
-- [ ] Session activity logging and tracking
-- [ ] Soft delete support for user profiles
+**When to Consider Microservices:**
+- Team grows to 10+ engineers with specialized domain ownership
+- Independent scaling requirements emerge (e.g., analytics service needs 10x resources)
+- Polyglot persistence needed (different databases for different domains)
+- Regulatory requirements demand physical separation
 
-**Features**
-- [ ] File upload support for profile pictures and documents (multipart/form-data)
-- [ ] Email notifications service integration (SMTP/SendGrid)
-- [ ] Advanced RBAC with granular permissions
-- [ ] Export profiles to CSV/PDF
+---
 
-### Frontend Improvements
+## AI Integration
 
-**Form Validation & UX**
-- [ ] Client-side form validation with Zod or React Hook Form
-- [ ] Loading skeleton states for better perceived performance
-- [ ] Confirmation dialogs for destructive actions
+**HuggingFace API** (feature-flagged):
+- **Model:** `facebook/bart-large-cnn` for text summarization
+- **Use Case:** Polish feedback content before manager approval
+- **Graceful Degradation:** Falls back to original text on API failure
+- **Configuration:** `HUGGINGFACE_API_KEY` environment variable
 
-**Data Handling**
-- [ ] Pagination UI components for profile and absence lists
-- [ ] Optimistic UI updates in React Query mutations
-- [ ] Error boundary components for graceful error handling
-- [ ] Retry logic for failed API requests
+**Enable in `docker-compose.yml`:**
+```yaml
+environment:
+  FEATURE_FEEDBACK_AI_POLISH_ENABLED: true
+  HUGGINGFACE_API_KEY: your_api_key_here
+```
 
-**Features**
-- [ ] File upload UI with drag-and-drop for profile pictures
-- [ ] Real-time WebSocket notifications for absence approvals
-- [ ] Search and filter functionality for profiles
-- [ ] Dark mode support
-
-**Accessibility & Polish**
-- [ ] ARIA labels and keyboard navigation
-- [ ] Responsive design improvements for mobile devices
-- [ ] Loading states and progress indicators
-- [ ] Form field autocomplete and validation feedback
+---
 
 
+## Why These Choices?
+
+| Technology | Rationale |
+|------------|-----------|
+| **Keycloak** | Industry-standard IdP, saves months of auth development, enterprise-ready |
+| **QueryDSL** | Type-safe queries prevent runtime SQL errors, better IDE support |
+| **MapStruct** | Compile-time DTO mapping (faster than reflection-based alternatives) |
+| **Zustand** | Simpler than Redux, no boilerplate, 1KB bundle size |
+| **TanStack Query** | Server state caching eliminates custom cache logic, automatic refetching |
+| **Feature Flags** | Enables gradual rollouts, A/B testing, kill switches for incidents |
+| **Docker Compose** | Dev/prod parity, easy onboarding, reproducible environments |
+| **PostgreSQL** | ACID compliance, jsonb support, production-grade reliability |
+| **TypeScript (strict)** | Catch errors at compile time, better refactoring, self-documenting code |
+| **Flyway** | Database versioning, reproducible migrations, rollback support |
+
+---
+
+## API Documentation
+
+**Interactive Swagger UI:** http://localhost:8080/swagger-ui.html
+
+**Key Endpoints:**
+
+## Development Notes
+
+**Running Tests:**
+```bash
+# Backend tests
+./mvnw test
+
+# Mutation testing (PITest)
+./mvnw org.pitest:pitest-maven:mutationCoverage
+```
+
+**Database Migrations:**
+```bash
+# Migrations run automatically on startup via Flyway
+# Located in: src/main/resources/db/migration/
+```
+
+**Feature Flag Example:**
+
+Backend:
+```java
+@RequireFeature(FeatureFlagConstants.FEEDBACK_AI_POLISH)
+@PostMapping("/{feedbackId}/polish")
+public ResponseEntity<FeedbackDto> polishFeedback(@PathVariable Long feedbackId) {
+    // Only accessible when feature is enabled
+}
+```
+
+Frontend:
+```typescript
+import { useFeature, FEATURE_FLAGS } from '../hooks/useFeatureFlags';
+
+const isAiPolishEnabled = useFeature(FEATURE_FLAGS.FEEDBACK_AI_POLISH);
+{isAiPolishEnabled && <PolishButton />}
+```
+
+---

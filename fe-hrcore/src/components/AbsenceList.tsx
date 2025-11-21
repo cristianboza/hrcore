@@ -4,7 +4,7 @@ import { AbsenceCard } from './AbsenceCard';
 
 export const AbsenceList: React.FC = () => {
   const currentUser = useAuthStore((state) => state.currentUser);
-  const { data: requests, isLoading, error } = useAbsenceRequests(currentUser?.id ?? 0);
+  const { data: requestsPage, isLoading, error } = useAbsenceRequests(currentUser?.id ?? '', 0, 10);
 
   if (!currentUser) return null;
 
@@ -18,8 +18,8 @@ export const AbsenceList: React.FC = () => {
   return (
     <div>
       <h2 className="text-xl font-bold mb-4">My Absence Requests</h2>
-      {requests && requests.length > 0 ? (
-        requests.map((req) => <AbsenceCard key={req.id} request={req} />)
+      {requestsPage && requestsPage.content.length > 0 ? (
+        requestsPage.content.map((req) => <AbsenceCard key={req.id} request={req} />)
       ) : (
         <div>No absence requests found.</div>
       )}

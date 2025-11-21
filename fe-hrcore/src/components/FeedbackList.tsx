@@ -5,8 +5,8 @@ import { FeedbackCard } from './FeedbackCard';
 
 export const FeedbackList: React.FC = () => {
   const currentUser = useAuthStore((state) => state.currentUser);
-  const { data: given, isLoading: loadingGiven } = useFeedback(currentUser?.id ?? 0, 'given');
-  const { data: received, isLoading: loadingReceived } = useFeedback(currentUser?.id ?? 0, 'received');
+  const { data: givenPage, isLoading: loadingGiven } = useFeedback(currentUser?.id ?? '', 'given');
+  const { data: receivedPage, isLoading: loadingReceived } = useFeedback(currentUser?.id ?? '', 'received');
 
   if (!currentUser) return null;
 
@@ -17,8 +17,8 @@ export const FeedbackList: React.FC = () => {
         <h3 className="font-semibold mb-2">Feedback Given</h3>
         {loadingGiven ? (
           <div>Loading...</div>
-        ) : given && given.length > 0 ? (
-          given.map((fb: Feedback) => <FeedbackCard key={fb.id} feedback={fb} />)
+        ) : givenPage && givenPage.content.length > 0 ? (
+          givenPage.content.map((fb: Feedback) => <FeedbackCard key={fb.id} feedback={fb} />)
         ) : (
           <div>No feedback given.</div>
         )}
@@ -27,8 +27,8 @@ export const FeedbackList: React.FC = () => {
         <h3 className="font-semibold mb-2">Feedback Received</h3>
         {loadingReceived ? (
           <div>Loading...</div>
-        ) : received && received.length > 0 ? (
-          received.map((fb: Feedback) => <FeedbackCard key={fb.id} feedback={fb} />)
+        ) : receivedPage && receivedPage.content.length > 0 ? (
+          receivedPage.content.map((fb: Feedback) => <FeedbackCard key={fb.id} feedback={fb} />)
         ) : (
           <div>No feedback received.</div>
         )}

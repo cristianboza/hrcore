@@ -1,0 +1,48 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.H2Dialect
+  
+  h2:
+    console:
+      enabled: false
+  
+  flyway:
+    enabled: false
+
+# Disable Keycloak for tests
+keycloak:
+  enabled: false
+  auth-server-url: http://localhost:8080
+  realm: hrcore-realm
+  resource: hrcore-client
+  credentials:
+    secret: test-secret
+
+# Security settings for tests
+spring.security.oauth2.resourceserver.jwt.issuer-uri: http://localhost:8080/realms/hrcore-realm
+
+# Feature flags for tests
+features:
+  feedback-polish:
+    enabled: true
+  huggingface:
+    api-key: test-key
+
+# Logging
+logging:
+  level:
+    org.springframework.web: WARN
+    org.springframework.security: WARN
+    com.example.hrcore: DEBUG
