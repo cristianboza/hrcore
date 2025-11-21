@@ -4,11 +4,12 @@
   "displayName": "HR Core Realm",
   "sslRequired": "external",
   "registrationAllowed": false,
-  "loginWithEmailAllowed": false,
+  "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
-  "resetPasswordAllowed": false,
+  "resetPasswordAllowed": true,
   "editUsernameAllowed": false,
   "bruteForceProtected": false,
+  "registrationEmailAsUsername": true,
   "roles": {
     "realm": [
       {
@@ -80,7 +81,7 @@
   ],
   "users": [
     {
-      "username": "admin",
+      "username": "admin@hrcore.com",
       "enabled": true,
       "email": "admin@hrcore.com",
       "firstName": "Super",
@@ -98,9 +99,9 @@
       ]
     },
     {
-      "username": "manager",
+      "username": "manager1@hrcore.com",
       "enabled": true,
-      "email": "manager@hrcore.com",
+      "email": "manager1@hrcore.com",
       "firstName": "John",
       "lastName": "Manager",
       "emailVerified": true,
@@ -116,7 +117,25 @@
       ]
     },
     {
-      "username": "employee1",
+      "username": "manager2@hrcore.com",
+      "enabled": true,
+      "email": "manager2@hrcore.com",
+      "firstName": "Sarah",
+      "lastName": "Director",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "manager123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "MANAGER"
+      ]
+    },
+    {
+      "username": "employee1@hrcore.com",
       "enabled": true,
       "email": "employee1@hrcore.com",
       "firstName": "Jane",
@@ -134,11 +153,119 @@
       ]
     },
     {
-      "username": "employee2",
+      "username": "employee2@hrcore.com",
       "enabled": true,
       "email": "employee2@hrcore.com",
       "firstName": "Bob",
       "lastName": "Johnson",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "employee123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "EMPLOYEE"
+      ]
+    },
+    {
+      "username": "employee3@hrcore.com",
+      "enabled": true,
+      "email": "employee3@hrcore.com",
+      "firstName": "Alice",
+      "lastName": "Brown",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "employee123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "EMPLOYEE"
+      ]
+    },
+    {
+      "username": "employee4@hrcore.com",
+      "enabled": true,
+      "email": "employee4@hrcore.com",
+      "firstName": "Charlie",
+      "lastName": "Davis",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "employee123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "EMPLOYEE"
+      ]
+    },
+    {
+      "username": "employee5@hrcore.com",
+      "enabled": true,
+      "email": "employee5@hrcore.com",
+      "firstName": "Diana",
+      "lastName": "Wilson",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "employee123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "EMPLOYEE"
+      ]
+    },
+    {
+      "username": "employee6@hrcore.com",
+      "enabled": true,
+      "email": "employee6@hrcore.com",
+      "firstName": "Edward",
+      "lastName": "Martinez",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "employee123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "EMPLOYEE"
+      ]
+    },
+    {
+      "username": "employee7@hrcore.com",
+      "enabled": true,
+      "email": "employee7@hrcore.com",
+      "firstName": "Fiona",
+      "lastName": "Garcia",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "employee123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "EMPLOYEE"
+      ]
+    },
+    {
+      "username": "employee8@hrcore.com",
+      "enabled": true,
+      "email": "employee8@hrcore.com",
+      "firstName": "George",
+      "lastName": "Anderson",
       "emailVerified": true,
       "credentials": [
         {

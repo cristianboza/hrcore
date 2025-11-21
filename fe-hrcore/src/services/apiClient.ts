@@ -7,7 +7,7 @@ import axios, {
 import { useAuthStore } from '../store/authStore';
 import type { ApiError } from '../types';
 
-const API_URL: string = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+const API_URL: string = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_URL,

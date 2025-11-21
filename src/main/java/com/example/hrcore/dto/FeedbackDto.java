@@ -1,12 +1,13 @@
 package com.example.hrcore.dto;
 
-import com.example.hrcore.entity.Feedback;
+import com.example.hrcore.entity.enums.FeedbackStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Data
 @NoArgsConstructor
@@ -14,25 +15,12 @@ import java.time.LocalDateTime;
 @Builder
 public class FeedbackDto {
     private Long id;
-    private Long fromUserId;
-    private Long toUserId;
+    private NamedUserDto fromUser;
+    private NamedUserDto toUser;
     private String content;
     private String polishedContent;
-    private String status;
+    private FeedbackStatus status;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-
-    public static FeedbackDto from(Feedback feedback) {
-        return FeedbackDto.builder()
-                .id(feedback.getId())
-                .fromUserId(feedback.getFromUserId())
-                .toUserId(feedback.getToUserId())
-                .content(feedback.getContent())
-                .polishedContent(feedback.getPolishedContent())
-                .status(feedback.getStatus())
-                .createdAt(feedback.getCreatedAt())
-                .updatedAt(feedback.getUpdatedAt())
-                .build();
-    }
 }
 

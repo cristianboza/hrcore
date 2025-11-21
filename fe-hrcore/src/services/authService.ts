@@ -8,7 +8,7 @@ interface LoginRedirectResponse {
 
 interface CallbackResponse {
   token: string;
-  userId: number;
+  userId: string;
   email: string;
   firstName: string;
   lastName: string;
@@ -46,26 +46,36 @@ const authService = {
   },
 
   async logout(): Promise<void> {
-    const token = localStorage.getItem('authToken');
     try {
-      if (token) {
-        await apiClient.post('/auth/logout-keycloak', { token });
-      } else {
-        await apiClient.post('/auth/logout');
-      }
-    } catch (error) {
-      console.error('Logout failed:', error);
-    } finally {
+      // Call backend logout endpoint with token in header
+      const response = await apiClient.post<{ logoutUrl: string }>('/auth/logout');
+      
+      // Clear local state
       useAuthStore.getState().logout();
       localStorage.removeItem('authToken');
       delete apiClient.defaults.headers.common['Authorization'];
       
+      // Redirect to Keycloak logout URL
+      const logoutUrl = response.data.logoutUrl;
+      if (logoutUrl) {
+        window.location.href = logoutUrl;
+      } else {
+        window.location.href = '/';
+      }
+    } catch (error) {
+      console.error('Logout failed:', error);
+      
+      // Clear local state anyway
+      useAuthStore.getState().logout();
+      localStorage.removeItem('authToken');
+      delete apiClient.defaults.headers.common['Authorization'];
+      
+      // Try to get logout URL as fallback
       try {
         const logoutResponse = await apiClient.get<{ logoutUrl: string }>('/auth/logout-redirect');
-        const logoutUrl = logoutResponse.data.logoutUrl;
-        window.location.href = logoutUrl;
-      } catch (error) {
-        console.error('Failed to get logout redirect URL:', error);
+        window.location.href = logoutResponse.data.logoutUrl;
+      } catch (redirectError) {
+        console.error('Failed to get logout redirect URL:', redirectError);
         window.location.href = '/';
       }
     }

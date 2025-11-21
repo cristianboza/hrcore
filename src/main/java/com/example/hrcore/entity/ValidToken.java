@@ -1,12 +1,19 @@
 package com.example.hrcore.entity;
 
+import com.example.hrcore.entity.enums.UserRole;
 import jakarta.persistence.*;
+import java.util.UUID;
 import lombok.AllArgsConstructor;
+import java.util.UUID;
 import lombok.Builder;
+import java.util.UUID;
 import lombok.Data;
+import java.util.UUID;
 import lombok.NoArgsConstructor;
+import java.util.UUID;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "valid_tokens")
@@ -24,10 +31,17 @@ public class ValidToken {
     private String tokenJti;
 
     @Column(nullable = false)
-    private Long userId;
+    private UUID userId;
+    
+    @Column(nullable = false, length = 50)
+    @Enumerated(EnumType.STRING)
+    private UserRole userRole;
 
     @Column(nullable = false)
     private String keycloakSubject;
+    
+    @Column(length = 2000)
+    private String idToken;
 
     @Column(nullable = false)
     private LocalDateTime issuedAt;

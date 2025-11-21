@@ -1,122 +1,179 @@
 package com.example.hrcore.controller;
 
+import com.example.hrcore.config.FeatureFlagConstants;
 import com.example.hrcore.dto.FeedbackDto;
+import com.example.hrcore.dto.FeedbackFilterDto;
+import com.example.hrcore.dto.FeedbackOperationContext;
+import com.example.hrcore.dto.PageResponse;
+import com.example.hrcore.entity.User;
+import com.example.hrcore.entity.enums.FeedbackStatus;
+import com.example.hrcore.security.annotation.RequireAuthenticated;
+import com.example.hrcore.security.annotation.RequireFeature;
+import com.example.hrcore.security.annotation.RequireManagerOrAbove;
+import com.example.hrcore.service.AuthenticationService;
 import com.example.hrcore.service.FeedbackService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/feedback")
+@RequestMapping("/api/v1/feedback")
 @RequiredArgsConstructor
+@Tag(name = "Feedback", description = "Feedback management endpoints")
+@SecurityRequirement(name = "bearer-jwt")
 public class FeedbackController {
 
     private final FeedbackService feedbackService;
+    private final AuthenticationService authenticationService;
 
-    @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'SUPER_ADMIN')")
+    @RequireAuthenticated
     @PostMapping
+    @Operation(
+        summary = "Submit feedback",
+        description = "Submit feedback from one user to another"
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "Feedback submitted successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid request data", content = @Content),
+        @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content),
+        @ApiResponse(responseCode = "403", description = "Forbidden", content = @Content)
+    })
     public ResponseEntity<FeedbackDto> submitFeedback(
-            @RequestParam Long fromUserId,
-            @RequestParam Long toUserId,
-            @RequestBody String content) {
-        log.info("POST /api/feedback - Submit feedback from user {} to user {}", fromUserId, toUserId);
-        try {
-            FeedbackDto feedback = feedbackService.submitFeedback(fromUserId, toUserId, content);
-            log.info("POST /api/feedback - Feedback created successfully with ID: {}", feedback.getId());
-            return ResponseEntity.status(HttpStatus.CREATED).body(feedback);
-        } catch (Exception e) {
-            log.error("POST /api/feedback - Error submitting feedback: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
-        }
+            @Parameter(description = "Feedback sender ID") @RequestParam UUID fromUserId,
+            @Parameter(description = "Feedback recipient ID") @RequestParam UUID toUserId,
+            @Parameter(description = "Feedback content") @RequestBody String content,
+            Authentication authentication) {
+        
+        User currentUser = authenticationService.getCurrentUser(authentication);
+        log.info("Submit feedback from user {} to user {} by {}", 
+            fromUserId, toUserId, currentUser.getEmail());
+        
+        FeedbackOperationContext context = FeedbackOperationContext.builder()
+                .currentUserId(currentUser.getId())
+                .currentUserRole(currentUser.getRole())
+                .build();
+        
+        FeedbackDto feedback = feedbackService.submitFeedback(fromUserId, toUserId, content, context);
+        
+        log.info("Feedback created successfully with ID: {}", feedback.getId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(feedback);
     }
 
-    @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'SUPER_ADMIN')")
-    @GetMapping("/received/{userId}")
-    public ResponseEntity<List<FeedbackDto>> getReceivedFeedback(@PathVariable Long userId) {
-        log.info("GET /api/feedback/received/{} - Fetching received feedback for user", userId);
-        try {
-            List<FeedbackDto> feedback = feedbackService.getReceivedFeedback(userId);
-            log.info("GET /api/feedback/received/{} - Found {} feedback items", userId, feedback.size());
-            return ResponseEntity.ok(feedback);
-        } catch (Exception e) {
-            log.error("GET /api/feedback/received/{} - Error fetching received feedback: {}", userId, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
+    @RequireAuthenticated
+    @PostMapping("/search")
+    @Operation(
+        summary = "Search feedback with filters",
+        description = "Advanced search and filtering of feedback. Managers/Admins can filter by user, status, dates, content. Employees see only their own."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Successfully retrieved feedback"),
+        @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content),
+        @ApiResponse(responseCode = "403", description = "Forbidden", content = @Content)
+    })
+    public ResponseEntity<PageResponse<FeedbackDto>> searchFeedback(
+            @Parameter(description = "Search filters and pagination") @RequestBody com.example.hrcore.dto.FeedbackSearchRequest searchRequest,
+            Authentication authentication) {
+        
+        User currentUser = authenticationService.getCurrentUser(authentication);
+        log.info("Searching feedback by {}, filters: fromUser={}, toUser={}, status={}", 
+            currentUser.getEmail(), searchRequest.getFromUserId(), searchRequest.getUserId(), searchRequest.getStatus());
+        
+        FeedbackFilterDto filters = FeedbackFilterDto.builder()
+                .fromUserId(searchRequest.getFromUserId())
+                .toUserId(searchRequest.getUserId())
+                .status(searchRequest.getStatus() != null ? FeedbackStatus.valueOf(searchRequest.getStatus().toUpperCase()) : null)
+                .createdAfter(searchRequest.getCreatedAfter())
+                .createdBefore(searchRequest.getCreatedBefore())
+                .contentContains(searchRequest.getContentContains())
+                .hasPolishedContent(searchRequest.getHasPolishedContent())
+                .build();
+        
+        FeedbackOperationContext context = FeedbackOperationContext.builder()
+                .currentUserId(currentUser.getId())
+                .currentUserRole(currentUser.getRole())
+                .page(searchRequest.getPage())
+                .size(searchRequest.getSize())
+                .sortBy(searchRequest.getSortBy())
+                .sortDirection(searchRequest.getSortDirection())
+                .build();
+        
+        PageResponse<FeedbackDto> feedback = feedbackService.searchFeedback(filters, context);
+        
+        log.debug("Found {} feedback items", feedback.getTotalElements());
+        return ResponseEntity.ok(feedback);
     }
 
-    @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'SUPER_ADMIN')")
-    @GetMapping("/given/{userId}")
-    public ResponseEntity<List<FeedbackDto>> getGivenFeedback(@PathVariable Long userId) {
-        log.info("GET /api/feedback/given/{} - Fetching given feedback for user", userId);
-        try {
-            List<FeedbackDto> feedback = feedbackService.getGivenFeedback(userId);
-            log.info("GET /api/feedback/given/{} - Found {} feedback items", userId, feedback.size());
-            return ResponseEntity.ok(feedback);
-        } catch (Exception e) {
-            log.error("GET /api/feedback/given/{} - Error fetching given feedback: {}", userId, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-
-    @PreAuthorize("hasAnyRole('MANAGER', 'SUPER_ADMIN')")
-    @GetMapping("/pending")
-    public ResponseEntity<List<FeedbackDto>> getPendingFeedback() {
-        log.info("GET /api/feedback/pending - Fetching pending feedback");
-        try {
-            List<FeedbackDto> feedback = feedbackService.getPendingFeedback();
-            log.info("GET /api/feedback/pending - Found {} pending feedback items", feedback.size());
-            return ResponseEntity.ok(feedback);
-        } catch (Exception e) {
-            log.error("GET /api/feedback/pending - Error fetching pending feedback: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-
-    @PreAuthorize("hasAnyRole('MANAGER', 'SUPER_ADMIN')")
+    @RequireManagerOrAbove
     @PutMapping("/{feedbackId}/approve")
-    public ResponseEntity<FeedbackDto> approveFeedback(@PathVariable Long feedbackId) {
-        log.info("PUT /api/feedback/{}/approve - Approving feedback", feedbackId);
-        try {
-            FeedbackDto feedback = feedbackService.approveFeedback(feedbackId);
-            log.info("PUT /api/feedback/{}/approve - Feedback approved successfully", feedbackId);
-            return ResponseEntity.ok(feedback);
-        } catch (Exception e) {
-            log.error("PUT /api/feedback/{}/approve - Error approving feedback: {}", feedbackId, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
-        }
+    public ResponseEntity<FeedbackDto> approveFeedback(
+            @PathVariable Long feedbackId,
+            Authentication authentication) {
+        
+        User currentUser = authenticationService.getCurrentUser(authentication);
+        log.info("Approving feedback {} by {}", feedbackId, currentUser.getEmail());
+        
+        FeedbackOperationContext context = FeedbackOperationContext.builder()
+                .currentUserId(currentUser.getId())
+                .currentUserRole(currentUser.getRole())
+                .build();
+        
+        FeedbackDto feedback = feedbackService.approveFeedback(feedbackId, context);
+        
+        log.info("Feedback {} approved successfully", feedbackId);
+        return ResponseEntity.ok(feedback);
     }
 
-    @PreAuthorize("hasAnyRole('MANAGER', 'SUPER_ADMIN')")
+    @RequireManagerOrAbove
     @PutMapping("/{feedbackId}/reject")
-    public ResponseEntity<FeedbackDto> rejectFeedback(@PathVariable Long feedbackId) {
-        log.info("PUT /api/feedback/{}/reject - Rejecting feedback", feedbackId);
-        try {
-            FeedbackDto feedback = feedbackService.rejectFeedback(feedbackId);
-            log.info("PUT /api/feedback/{}/reject - Feedback rejected successfully", feedbackId);
-            return ResponseEntity.ok(feedback);
-        } catch (Exception e) {
-            log.error("PUT /api/feedback/{}/reject - Error rejecting feedback: {}", feedbackId, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
-        }
+    public ResponseEntity<FeedbackDto> rejectFeedback(
+            @PathVariable Long feedbackId,
+            Authentication authentication) {
+        
+        User currentUser = authenticationService.getCurrentUser(authentication);
+        log.info("Rejecting feedback {} by {}", feedbackId, currentUser.getEmail());
+        
+        FeedbackOperationContext context = FeedbackOperationContext.builder()
+                .currentUserId(currentUser.getId())
+                .currentUserRole(currentUser.getRole())
+                .build();
+        
+        FeedbackDto feedback = feedbackService.rejectFeedback(feedbackId, context);
+        
+        log.info("Feedback {} rejected successfully", feedbackId);
+        return ResponseEntity.ok(feedback);
     }
 
-    @PreAuthorize("hasAnyRole('MANAGER', 'SUPER_ADMIN')")
+    @RequireManagerOrAbove
+    @RequireFeature(FeatureFlagConstants.FEEDBACK_AI_POLISH)
     @PostMapping("/{feedbackId}/polish")
-    public ResponseEntity<?> polishFeedback(@PathVariable Long feedbackId) {
-        log.info("POST /api/feedback/{}/polish - Polishing feedback", feedbackId);
-        try {
-            FeedbackDto feedback = feedbackService.polishFeedback(feedbackId);
-            log.info("POST /api/feedback/{}/polish - Feedback polished successfully", feedbackId);
-            return ResponseEntity.ok(feedback);
-        } catch (Exception e) {
-            log.error("POST /api/feedback/{}/polish - Error polishing feedback: {}", feedbackId, e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Error polishing feedback: " + e.getMessage());
-        }
+    public ResponseEntity<FeedbackDto> polishFeedback(
+            @PathVariable Long feedbackId,
+            Authentication authentication) {
+        
+        User currentUser = authenticationService.getCurrentUser(authentication);
+        log.info("Polishing feedback {} by {}", feedbackId, currentUser.getEmail());
+        
+        FeedbackOperationContext context = FeedbackOperationContext.builder()
+                .currentUserId(currentUser.getId())
+                .currentUserRole(currentUser.getRole())
+                .build();
+        
+        FeedbackDto feedback = feedbackService.polishFeedback(feedbackId, context);
+        
+        log.info("Feedback {} polished successfully", feedbackId);
+        return ResponseEntity.ok(feedback);
     }
 }

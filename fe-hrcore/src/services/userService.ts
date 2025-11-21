@@ -1,15 +1,24 @@
 import apiClient from './apiClient';
 
 export interface User {
-  id: number;
+  id: string;
   firstName: string;
   lastName: string;
   email: string;
   phone?: string;
   department?: string;
   role: string;
+  managerId?: string;
+  manager?: NamedUser;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface NamedUser {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
 }
 
 export interface CreateUserRequest {
@@ -27,7 +36,7 @@ export const userService = {
     return response.data;
   },
 
-  getUserById: async (id: number): Promise<User> => {
+  getUserById: async (id: string): Promise<User> => {
     const response = await apiClient.get(`/users/${id}`);
     return response.data;
   },
@@ -37,12 +46,12 @@ export const userService = {
     return response.data;
   },
 
-  updateUser: async (id: number, user: Partial<User>): Promise<User> => {
+  updateUser: async (id: string, user: Partial<User>): Promise<User> => {
     const response = await apiClient.put(`/users/${id}`, user);
     return response.data;
   },
 
-  deleteUser: async (id: number): Promise<void> => {
+  deleteUser: async (id: string): Promise<void> => {
     await apiClient.delete(`/users/${id}`);
   },
 };

@@ -1,12 +1,18 @@
 package com.example.hrcore.entity;
 
 import jakarta.persistence.*;
+import java.util.UUID;
 import lombok.AllArgsConstructor;
+import java.util.UUID;
 import lombok.Builder;
+import java.util.UUID;
 import lombok.Data;
+import java.util.UUID;
 import lombok.NoArgsConstructor;
+import java.util.UUID;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "invalid_tokens")
@@ -24,7 +30,7 @@ public class InvalidToken {
     private String tokenJti;
 
     @Column(nullable = false)
-    private Long userId;
+    private UUID userId;
 
     @Column(nullable = false)
     private LocalDateTime invalidatedAt;

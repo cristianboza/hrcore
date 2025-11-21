@@ -1,23 +1,37 @@
 package com.example.hrcore.controller;
 
 import com.example.hrcore.entity.User;
+import java.util.UUID;
 import com.example.hrcore.entity.ValidToken;
+import java.util.UUID;
 import com.example.hrcore.repository.ValidTokenRepository;
+import java.util.UUID;
 import com.example.hrcore.repository.UserRepository;
+import java.util.UUID;
 import com.example.hrcore.service.TokenService;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import java.util.UUID;
 import org.springframework.http.ResponseEntity;
+import java.util.UUID;
 import org.springframework.security.access.prepost.PreAuthorize;
+import java.util.UUID;
 import org.springframework.web.bind.annotation.*;
+import java.util.UUID;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 import java.util.HashMap;
+import java.util.UUID;
 import java.util.List;
+import java.util.UUID;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/admin/logged-users")
+@RequestMapping("/api/v1/admin/logged-users")
 @RequiredArgsConstructor
 public class LoggedUsersController {
 
@@ -50,7 +64,7 @@ public class LoggedUsersController {
 
     @GetMapping("/user/{userId}")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
-    public ResponseEntity<List<ValidToken>> getUserSessions(@PathVariable Long userId) {
+    public ResponseEntity<List<ValidToken>> getUserSessions(@PathVariable UUID userId) {
         if (!userRepository.existsById(userId)) {
             return ResponseEntity.notFound().build();
         }
@@ -59,7 +73,7 @@ public class LoggedUsersController {
 
     @PostMapping("/logout/{userId}")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
-    public ResponseEntity<Map<String, String>> forceLogoutUser(@PathVariable Long userId) {
+    public ResponseEntity<Map<String, String>> forceLogoutUser(@PathVariable UUID userId) {
         if (!userRepository.existsById(userId)) {
             return ResponseEntity.notFound().build();
         }

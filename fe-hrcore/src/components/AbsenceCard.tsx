@@ -1,91 +1,212 @@
-import { AbsenceRequest, ABSENCE_STATUS } from '../types/absence';
+import { useState } from 'react';
+import { AbsenceRequest } from '../types/absence';
+import { useApproveAbsenceRequest, useRejectAbsenceRequest } from '../hooks/useAbsence';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Badge } from './ui/badge';
+import { Button } from './ui/button';
+import { Calendar, CheckCircle, XCircle, AlertCircle, MessageSquare } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog';
+import { Textarea } from './ui/textarea';
 
 interface AbsenceCardProps {
   request: AbsenceRequest;
-  onApprove?: (id: number) => void;
-  onReject?: (id: number, reason: string) => void;
-  onManagerUpdate?: (id: number, status: string, comment?: string) => void;
+  showActions?: boolean;
 }
 
-export const AbsenceCard: React.FC<AbsenceCardProps> = ({ request, onApprove, onReject, onManagerUpdate }) => {
-  const statusColor = {
-    [ABSENCE_STATUS.PENDING]: 'bg-yellow-100 text-yellow-800',
-    [ABSENCE_STATUS.APPROVED]: 'bg-green-100 text-green-800',
-    [ABSENCE_STATUS.REJECTED]: 'bg-red-100 text-red-800',
+export const AbsenceCard: React.FC<AbsenceCardProps> = ({ request, showActions = false }) => {
+  const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const { mutate: approve, isPending: isApproving } = useApproveAbsenceRequest();
+  const { mutate: reject, isPending: isRejecting } = useRejectAbsenceRequest();
+
+  const handleApprove = () => {
+    approve(
+      { requestId: request.id },
+      {
+        onSuccess: () => {
+          console.log('Request approved');
+        },
+      }
+    );
   };
 
-  const startDate = new Date(request.startDate).toLocaleDateString();
-  const endDate = new Date(request.endDate).toLocaleDateString();
+  const handleReject = () => {
+    if (!rejectionReason.trim()) return;
+    reject(
+      { requestId: request.id, reason: rejectionReason },
+      {
+        onSuccess: () => {
+          setIsRejectDialogOpen(false);
+          setRejectionReason('');
+        },
+      }
+    );
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'APPROVED':
+        return 'bg-green-100 text-green-800 border-green-200';
+      case 'REJECTED':
+        return 'bg-red-100 text-red-800 border-red-200';
+      case 'PENDING':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case 'VACATION':
+        return 'bg-blue-100 text-blue-800';
+      case 'SICK':
+        return 'bg-purple-100 text-purple-800';
+      case 'OTHER':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const calculateDays = () => {
+    const start = new Date(request.startDate);
+    const end = new Date(request.endDate);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    return diffDays;
+  };
 
   return (
-    <div className="bg-white rounded-lg shadow p-6 mb-4">
-      <div className="flex justify-between items-start mb-4">
-        <div>
-          <p className="text-sm text-gray-600">User ID: {request.userId}</p>
-          <p className="text-lg font-semibold text-gray-900">{request.type}</p>
-        </div>
-        <span className={`px-3 py-1 rounded-full text-sm font-semibold ${statusColor[request.status]}`}>
-          {request.status}
-        </span>
-      </div>
+    <>
+      <Card className="hover:shadow-md transition-shadow">
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-base">
+                  {formatDate(request.startDate)} - {formatDate(request.endDate)}
+                </CardTitle>
+                <Badge variant="outline" className="ml-2">
+                  {calculateDays()} {calculateDays() === 1 ? 'day' : 'days'}
+                </Badge>
+              </div>
+              <CardDescription className="flex items-center gap-2">
+                <Badge className={getTypeColor(request.type)}>{request.type}</Badge>
+                <Badge className={getStatusColor(request.status)} variant="outline">
+                  {request.status}
+                </Badge>
+              </CardDescription>
+            </div>
 
-      <div className="mb-4">
-        <p className="text-gray-700">
-          <span className="font-semibold">Dates:</span> {startDate} to {endDate}
-        </p>
+            {showActions && request.status === 'PENDING' && request.canApprove && (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1 text-green-600 hover:text-green-700 hover:bg-green-50"
+                  onClick={handleApprove}
+                  disabled={isApproving}
+                >
+                  <CheckCircle className="h-4 w-4" />
+                  Approve
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={() => setIsRejectDialogOpen(true)}
+                  disabled={isRejecting}
+                >
+                  <XCircle className="h-4 w-4" />
+                  Reject
+                </Button>
+              </div>
+            )}
+          </div>
+        </CardHeader>
+
         {request.reason && (
-          <p className="text-gray-700 mt-2">
-            <span className="font-semibold">Reason:</span> {request.reason}
-          </p>
+          <CardContent className="pt-0">
+            <div className="flex gap-2 text-sm text-muted-foreground">
+              <MessageSquare className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <p>{request.reason}</p>
+            </div>
+          </CardContent>
         )}
+
         {request.rejectionReason && (
-          <p className="text-red-600 mt-2">
-            <span className="font-semibold">Rejection Reason:</span> {request.rejectionReason}
-          </p>
-        )}
-      </div>
-
-      <div className="flex gap-2 mt-4">
-        {onApprove && request.status === ABSENCE_STATUS.PENDING && (
-          <button
-            onClick={() => onApprove(request.id)}
-            className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
-          >
-            Approve
-          </button>
+          <CardContent className="pt-0">
+            <div className="flex gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-md border border-red-200">
+              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="font-medium">Rejection Reason:</p>
+                <p>{request.rejectionReason}</p>
+              </div>
+            </div>
+          </CardContent>
         )}
 
-        {onReject && request.status === ABSENCE_STATUS.PENDING && (
-          <button
-            onClick={() => {
-              const reason = prompt('Reason for rejection:');
-              if (reason) onReject(request.id, reason);
-            }}
-            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-          >
-            Reject
-          </button>
-        )}
+        <CardContent className="pt-0 pb-3">
+          <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+            {request.user && (
+              <div>Employee: {request.user.firstName} {request.user.lastName}</div>
+            )}
+            {request.createdBy && (
+              <div>Created by: {request.createdBy.firstName} {request.createdBy.lastName}</div>
+            )}
+            <div>Requested on {request.createdAt ? formatDate(request.createdAt) : 'Unknown'}</div>
+          </div>
+        </CardContent>
+      </Card>
 
-        {request.status === ABSENCE_STATUS.PENDING && onManagerUpdate && (
-          <button
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-            onClick={() => {
-              const status = prompt('New status (APPROVED/REJECTED/PENDING):', request.status);
-              const managerComment = prompt('Manager comment:');
-              if (status) {
-                onManagerUpdate(request.id, status, managerComment === null ? undefined : managerComment);
-              }
-            }}
-          >
-            Manager Update
-          </button>
-        )}
-      </div>
-
-      <p className="text-xs text-gray-500 mt-4">
-        {request.createdAt ? new Date(request.createdAt).toLocaleString() : ''}
-      </p>
-    </div>
+      {/* Rejection Dialog */}
+      <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Absence Request</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for rejecting this request.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Textarea
+              placeholder="Enter rejection reason..."
+              value={rejectionReason}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setRejectionReason(e.target.value)}
+              rows={4}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsRejectDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleReject}
+              disabled={!rejectionReason.trim() || isRejecting}
+            >
+              {isRejecting ? 'Rejecting...' : 'Reject Request'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };

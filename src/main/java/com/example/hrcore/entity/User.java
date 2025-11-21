@@ -1,41 +1,68 @@
 package com.example.hrcore.entity;
 
+import com.example.hrcore.entity.enums.UserRole;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 @Entity
-@Table(name = "users")
-@Data
+@Table(name = "users", indexes = {
+    @Index(name = "idx_users_email", columnList = "email"),
+    @Index(name = "idx_users_manager_id", columnList = "manager_id"),
+    @Index(name = "idx_users_role", columnList = "role"),
+    @Index(name = "idx_users_department", columnList = "department")
+})
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@ToString(exclude = {"manager", "directReports"})
+@EqualsAndHashCode(of = "id")
 public class User {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
 
-    @Column(nullable = false, unique = true)
+    @NotBlank(message = "Email is required")
+    @Email(message = "Email must be valid")
+    @Column(nullable = false, unique = true, length = 255)
     private String email;
 
-    @Column(nullable = false)
+    @NotBlank(message = "First name is required")
+    @Column(nullable = false, length = 100)
     private String firstName;
 
-    @Column(nullable = false)
+    @NotBlank(message = "Last name is required")
+    @Column(nullable = false, length = 100)
     private String lastName;
 
+    @Column(length = 20)
     private String phone;
 
+    @Column(length = 100)
     private String department;
 
-    @Column(nullable = false)
+    @NotNull(message = "Role is required")
+    @Column(nullable = false, length = 50)
     @Enumerated(EnumType.STRING)
     private UserRole role;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "manager_id", foreignKey = @ForeignKey(name = "fk_manager"))
+    private User manager;
+
+    @OneToMany(mappedBy = "manager", fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<User> directReports = new ArrayList<>();
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -45,16 +72,36 @@ public class User {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        final LocalDateTime now = LocalDateTime.now();
+        this.createdAt = now;
+        this.updatedAt = now;
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
     }
 
-    public enum UserRole {
-        SUPER_ADMIN, MANAGER, EMPLOYEE
+    public void setManager(User manager) {
+        if (this.manager != null) {
+            this.manager.getDirectReports().remove(this);
+        }
+        this.manager = manager;
+        if (manager != null && !manager.getDirectReports().contains(this)) {
+            manager.getDirectReports().add(this);
+        }
+    }
+
+    public String getFullName() {
+        return firstName + " " + lastName;
+    }
+
+    public boolean isManager() {
+        return role.isManager();
+    }
+
+    public boolean canManage(User employee) {
+        return role.canManageRole(employee.getRole()) || 
+               (role.isManager() && employee.getManager() != null && employee.getManager().getId().equals(this.id));
     }
 }

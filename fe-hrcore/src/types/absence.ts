@@ -13,17 +13,27 @@ export const ABSENCE_TYPE = {
 export type AbsenceStatus = typeof ABSENCE_STATUS[keyof typeof ABSENCE_STATUS];
 export type AbsenceType = typeof ABSENCE_TYPE[keyof typeof ABSENCE_TYPE];
 
+export interface NamedUser {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
 export interface AbsenceRequest {
   id: number;
-  userId: number;
+  user: NamedUser;
   startDate: string;
   endDate: string;
   reason?: string;
   type: AbsenceType;
   status: AbsenceStatus;
-  approverId?: number;
+  approver?: NamedUser;
   rejectionReason?: string;
-  createdAt?: string;
+  createdBy: NamedUser;
+  createdAt: string;
   updatedAt?: string;
+  canApprove?: boolean; // Whether current user can approve/reject this request
 }
+
 
