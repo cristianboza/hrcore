@@ -1,15 +1,11 @@
 package com.example.hrcore.entity;
 
 import jakarta.persistence.*;
-import java.util.UUID;
 import lombok.AllArgsConstructor;
-import java.util.UUID;
 import lombok.Builder;
-import java.util.UUID;
 import lombok.Data;
-import java.util.UUID;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import java.util.UUID;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -20,6 +16,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@EqualsAndHashCode(of = "tokenJti")
 public class InvalidToken {
 
     @Id
