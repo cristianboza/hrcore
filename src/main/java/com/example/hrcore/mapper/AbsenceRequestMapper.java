@@ -29,17 +29,21 @@ public abstract class AbsenceRequestMapper {
     public abstract List<AbsenceRequestDto> toDtoList(List<AbsenceRequest> entities);
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "createdAt", ignore = true)
-    @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "user", ignore = true)
+    @Mapping(target = "requestCreator", ignore = true)
+    @Mapping(target = "createdBy", ignore = true)
+    @Mapping(target = "lastModifiedBy", ignore = true)
     @Mapping(target = "userId", source = "user.id")
     @Mapping(target = "approverId", source = "approver.id")
-    @Mapping(target = "createdById", source = "createdBy.id")
+    @Mapping(target = "createdById", expression = "java(dto.getCreatedBy() != null ? dto.getCreatedBy().getId() : null)")
     public abstract AbsenceRequest toEntity(AbsenceRequestDto dto);
 
     @Mapping(target = "id", ignore = true)
+    @Mapping(target = "user", ignore = true)
+    @Mapping(target = "requestCreator", ignore = true)
+    @Mapping(target = "createdBy", ignore = true)
+    @Mapping(target = "lastModifiedBy", ignore = true)
     @Mapping(target = "userId", ignore = true)
-    @Mapping(target = "createdAt", ignore = true)
-    @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "createdById", ignore = true)
     public abstract void updateEntityFromDto(AbsenceRequestDto dto, @MappingTarget AbsenceRequest entity);
 

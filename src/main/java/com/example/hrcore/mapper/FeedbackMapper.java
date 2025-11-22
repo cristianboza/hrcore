@@ -28,17 +28,19 @@ public abstract class FeedbackMapper {
     public abstract List<FeedbackDto> toDtoList(List<Feedback> feedbacks);
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "createdAt", ignore = true)
-    @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "toUser", ignore = true)
+    @Mapping(target = "createdBy", ignore = true)
+    @Mapping(target = "lastModifiedBy", ignore = true)
     @Mapping(target = "fromUserId", source = "fromUser.id")
     @Mapping(target = "toUserId", source = "toUser.id")
     public abstract Feedback toEntity(FeedbackDto dto);
 
     @Mapping(target = "id", ignore = true)
+    @Mapping(target = "toUser", ignore = true)
+    @Mapping(target = "createdBy", ignore = true)
+    @Mapping(target = "lastModifiedBy", ignore = true)
     @Mapping(target = "fromUserId", ignore = true)
     @Mapping(target = "toUserId", ignore = true)
-    @Mapping(target = "createdAt", ignore = true)
-    @Mapping(target = "updatedAt", ignore = true)
     public abstract void updateEntityFromDto(FeedbackDto dto, @MappingTarget Feedback entity);
 
     public PageResponse<FeedbackDto> toPageResponse(Page<Feedback> page) {

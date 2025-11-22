@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -23,10 +24,10 @@ import java.util.UUID;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 @ToString(exclude = {"manager", "directReports"})
-@EqualsAndHashCode(of = "id")
-public class User {
+@EqualsAndHashCode(of = "id", callSuper = false)
+public class User extends Auditable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -63,24 +64,6 @@ public class User {
     @OneToMany(mappedBy = "manager", fetch = FetchType.LAZY)
     @Builder.Default
     private List<User> directReports = new ArrayList<>();
-
-    @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-    @Column(nullable = false)
-    private LocalDateTime updatedAt;
-
-    @PrePersist
-    protected void onCreate() {
-        final LocalDateTime now = LocalDateTime.now();
-        this.createdAt = now;
-        this.updatedAt = now;
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        this.updatedAt = LocalDateTime.now();
-    }
 
     public void setManager(User manager) {
         if (this.manager != null) {
