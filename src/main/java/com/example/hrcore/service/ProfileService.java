@@ -1,10 +1,6 @@
 package com.example.hrcore.service;
 
-import com.example.hrcore.dto.PageResponse;
-import com.example.hrcore.dto.UserCreationData;
-import com.example.hrcore.dto.UserDto;
-import com.example.hrcore.dto.UserFilterDto;
-import com.example.hrcore.dto.UserOperationContext;
+import com.example.hrcore.dto.*;
 import com.example.hrcore.entity.User;
 import com.example.hrcore.entity.enums.UserRole;
 import com.example.hrcore.exception.InvalidOperationException;
@@ -13,7 +9,6 @@ import com.example.hrcore.exception.UserNotFoundException;
 import com.example.hrcore.mapper.UserMapper;
 import com.example.hrcore.repository.UserRepository;
 import com.example.hrcore.specification.UserSpecification;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -44,11 +39,11 @@ public class ProfileService {
     private final FeedbackService feedbackService;
     private final AbsenceRequestService absenceRequestService;
 
-    public ProfileService(UserRepository userRepository, UserMapper userMapper, 
-                         TokenService tokenService, KeycloakService keycloakService, 
-                         ValidationService validationService,
-                         FeedbackService feedbackService,
-                         AbsenceRequestService absenceRequestService) {
+    public ProfileService(UserRepository userRepository, UserMapper userMapper,
+                          TokenService tokenService, KeycloakService keycloakService,
+                          ValidationService validationService,
+                          FeedbackService feedbackService,
+                          AbsenceRequestService absenceRequestService) {
         this.userRepository = userRepository;
         this.userMapper = userMapper;
         this.tokenService = tokenService;
@@ -60,7 +55,7 @@ public class ProfileService {
 
     public List<UserDto> searchProfiles(UserFilterDto filters, UUID currentUserId, UserRole currentRole) {
         Specification<User> spec = UserSpecification.withFilters(filters);
-        
+
         return userRepository.findAll(spec).stream()
                 .map(user -> getProfileWithRoleFiltering(user.getId(), currentUserId, currentRole))
                 .filter(Optional::isPresent)
@@ -69,26 +64,26 @@ public class ProfileService {
     }
 
     public PageResponse<UserDto> searchProfilesPaginated(
-            UserFilterDto filters, 
-            UUID currentUserId, 
+            UserFilterDto filters,
+            UUID currentUserId,
             UserRole currentRole,
             int page,
             int size) {
-        
+
         Pageable pageable = PageRequest.of(page, size, Sort.by("lastName", "firstName"));
-        
+
         // Build specification with role filtering in query
         Specification<User> spec = UserSpecification.withFilters(filters)
                 .and(UserSpecification.excludeSuperAdminsForNonSuperAdmin(currentRole));
-        
+
         Page<User> userPage = userRepository.findAll(spec, pageable);
-        
+
         List<UserDto> content = userPage.getContent().stream()
                 .map(user -> getProfileWithRoleFiltering(user.getId(), currentUserId, currentRole))
                 .filter(Optional::isPresent)
                 .map(Optional::get)
                 .toList();
-        
+
         return PageResponse.<UserDto>builder()
                 .content(content)
                 .page(userPage.getNumber())
@@ -108,11 +103,11 @@ public class ProfileService {
         }
 
         UserDto dto = userMapper.toDto(targetUser);
-        
+
         if (!canViewAllData(userId, currentUserId, currentRole)) {
             maskSensitiveData(dto);
         }
-        
+
         return Optional.of(dto);
     }
 
@@ -130,7 +125,7 @@ public class ProfileService {
             return false;
         }
     }
-    
+
     @Cacheable(value = "permissions", key = "#userId + '-delete-' + #currentUserId")
     public boolean canDeleteProfile(UUID userId, UUID currentUserId, UserRole currentRole) {
         try {
@@ -156,9 +151,9 @@ public class ProfileService {
 
     @Transactional
     @Caching(evict = {
-        @CacheEvict(value = "users", key = "#userId"),
-        @CacheEvict(value = "profiles", allEntries = true),
-        @CacheEvict(value = "permissions", allEntries = true)
+            @CacheEvict(value = "users", key = "#userId"),
+            @CacheEvict(value = "profiles", allEntries = true),
+            @CacheEvict(value = "permissions", allEntries = true)
     })
     public UserDto updateProfile(UUID userId, UUID currentUserId, UserRole currentRole, UserDto updateDto) {
         // Validate permissions using validation service
@@ -189,10 +184,10 @@ public class ProfileService {
 
     @Transactional
     @Caching(evict = {
-        @CacheEvict(value = "users", key = "#userId"),
-        @CacheEvict(value = "profiles", allEntries = true),
-        @CacheEvict(value = "permissions", allEntries = true),
-        @CacheEvict(value = "managerReports", allEntries = true)
+            @CacheEvict(value = "users", key = "#userId"),
+            @CacheEvict(value = "profiles", allEntries = true),
+            @CacheEvict(value = "permissions", allEntries = true),
+            @CacheEvict(value = "managerReports", allEntries = true)
     })
     public void deleteProfile(UUID userId, UUID currentUserId, UserRole currentRole) {
         // Validate permissions using validation service
@@ -209,10 +204,10 @@ public class ProfileService {
 
         // Get all id_tokens for this user to logout from Keycloak
         List<String> idTokens = tokenService.getIdTokensForUser(userId);
-        
+
         // Invalidate all tokens in database
         tokenService.invalidateAllUserTokens(userId);
-        
+
         // Logout from Keycloak for each active session
         for (String idToken : idTokens) {
             try {
@@ -223,82 +218,78 @@ public class ProfileService {
                 log.warn("Failed to generate logout URL for user {}: {}", userId, e.getMessage());
             }
         }
-        
+
         userRepository.deleteById(userId);
         log.info("Profile deleted: {}, Sessions invalidated: {}", userId, idTokens.size());
     }
 
     @Transactional
     @Caching(evict = {
-        @CacheEvict(value = "users", allEntries = true),
-        @CacheEvict(value = "profiles", allEntries = true),
-        @CacheEvict(value = "permissions", allEntries = true),
-        @CacheEvict(value = "managerReports", allEntries = true)
+            @CacheEvict(value = "users", allEntries = true),
+            @CacheEvict(value = "profiles", allEntries = true),
+            @CacheEvict(value = "permissions", allEntries = true),
+            @CacheEvict(value = "managerReports", allEntries = true)
     })
     public UserDto createUser(UserCreationData userData, UserOperationContext context) {
-        
+
         // Validate all business rules using validation service
         validationService.validateUserCreation(userData, context);
-        
-        // Create user in Keycloak first
-        String keycloakUserId;
+
+        String keycloakUserId = keycloakService.createKeycloakUser(userData);
+
         try {
-            keycloakUserId = keycloakService.createKeycloakUser(userData);
-        } catch (InvalidOperationException e) {
-            // Re-throw validation errors from Keycloak (e.g., duplicate username)
-            throw e;
-        }
-        
-        try {
-            // Create user in database
-            User.UserBuilder userBuilder = User.builder()
-                    .email(userData.getEmail())
-                    .firstName(userData.getFirstName())
-                    .lastName(userData.getLastName())
-                    .phone(userData.getPhone())
-                    .department(userData.getDepartment())
-                    .role(userData.getRole() != null ? userData.getRole() : UserRole.EMPLOYEE);
-            
-            // Set manager if provided
-            if (userData.getManagerId() != null) {
-                User manager = userRepository.findById(userData.getManagerId())
-                        .orElseThrow(() -> new UserNotFoundException(userData.getManagerId()));
-                
-                // Validate manager can be assigned
-                validationService.validateUserCanBeManager(manager);
-                
-                userBuilder.manager(manager);
-            } else if (context.getCurrentUserRole() == UserRole.MANAGER) {
-                // If manager creates user without specifying manager, assign to themselves
-                User currentUserEntity = userRepository.findById(context.getCurrentUserId())
-                        .orElseThrow(() -> new UserNotFoundException(context.getCurrentUserId()));
-                userBuilder.manager(currentUserEntity);
-            }
-            
-            User user = userBuilder.build();
-            
-            // Validate no circular reference
-            if (user.getManager() != null) {
-                validationService.validateNoCircularReference(user, user.getManager());
-            }
-            
-            User savedUser = userRepository.save(user);
-            
-            log.info("User created - Email: {}, ID: {}, Keycloak ID: {}, Created by: {}", 
-                userData.getEmail(), savedUser.getId(), 
-                keycloakUserId, context.getCurrentUserId());
+            User newUser = mapperToEntity(userData);
+
+
+            findManager(userData, context).ifPresent(manager -> {
+                newUser.setManager(manager);
+                validationService.validateNoCircularReference(newUser, manager);
+            });
+
+
+            User savedUser = userRepository.save(newUser);
+
+            log.info("User created - Email: {}, ID: {}, Keycloak ID: {}, Created by: {}", userData.getEmail(), savedUser.getId(), keycloakUserId, context.getCurrentUserId());
+
             return userMapper.toDto(savedUser);
-            
+
         } catch (Exception e) {
             // Rollback: delete from Keycloak if database creation fails
             log.error("Failed to create user in database, rolling back Keycloak user", e);
-            try {
-                keycloakService.deleteKeycloakUser(keycloakUserId);
-            } catch (Exception deleteEx) {
-                log.error("Failed to delete Keycloak user during rollback", deleteEx);
-            }
+            keycloakService.deleteKeycloakUser(keycloakUserId);
             throw e;
         }
+    }
+
+    private static User mapperToEntity(UserCreationData userData) {
+        return User.builder()
+                .email(userData.getEmail())
+                .firstName(userData.getFirstName())
+                .lastName(userData.getLastName())
+                .phone(userData.getPhone())
+                .department(userData.getDepartment())
+                .role(userData.getRole() != null ? userData.getRole() : UserRole.EMPLOYEE).build();
+    }
+
+    private Optional<User> findManager(UserCreationData userData, UserOperationContext context) {
+
+        if (userData.getManagerId() != null) {
+            User manager = userRepository.findById(userData.getManagerId())
+                    .orElseThrow(() -> new UserNotFoundException(userData.getManagerId()));
+
+            // Validate manager can be assigned
+            validationService.validateUserCanBeManager(manager);
+
+            return Optional.of(manager);
+
+        } else if (context.getCurrentUserRole() == UserRole.MANAGER) {
+            // If manager creates user without specifying manager, assign to themselves
+            User currentUserEntity = userRepository.findById(context.getCurrentUserId())
+                    .orElseThrow(() -> new UserNotFoundException(context.getCurrentUserId()));
+
+            return Optional.of(currentUserEntity);
+        }
+        return Optional.empty();
     }
 
     public boolean canViewAllData(UUID userId, UUID currentUserId, UserRole currentRole) {
@@ -335,15 +326,15 @@ public class ProfileService {
 
         if (!manager.getRole().canBeAssignedAsManager()) {
             throw new InvalidOperationException(
-                "assign user as manager", 
-                "user with role " + manager.getRole() + " cannot be a manager"
+                    "assign user as manager",
+                    "user with role " + manager.getRole() + " cannot be a manager"
             );
         }
 
         if (wouldCreateCycle(employee, manager)) {
             throw new InvalidOperationException(
-                "assign this manager", 
-                "it would create a circular hierarchy"
+                    "assign this manager",
+                    "it would create a circular hierarchy"
             );
         }
 
@@ -372,14 +363,14 @@ public class ProfileService {
 
         User manager = userRepository.findById(managerId)
                 .orElseThrow(() -> new UserNotFoundException(managerId));
-        
+
         if (!manager.getRole().canBeAssignedAsManager()) {
             throw new InvalidOperationException(
-                "assign user as manager",
-                "user with role " + manager.getRole() + " cannot be a manager"
+                    "assign user as manager",
+                    "user with role " + manager.getRole() + " cannot be a manager"
             );
         }
-        
+
         user.setManager(manager);
     }
 
@@ -403,98 +394,98 @@ public class ProfileService {
     public PageResponse<com.example.hrcore.dto.FeedbackDto> getEmployeeFeedback(
             UUID userId, String type, int page, int size, String sortBy, String sortDirection,
             UUID currentUserId, UserRole currentRole) {
-        
-        log.info("Getting feedback for employee {} (type: {}) by user {} with role {}", 
-            userId, type, currentUserId, currentRole);
-        
+
+        log.info("Getting feedback for employee {} (type: {}) by user {} with role {}",
+                userId, type, currentUserId, currentRole);
+
         if (!currentRole.isManagerOrAbove()) {
             throw new UnauthorizedException("view employee feedback", "requires manager role or above");
         }
-        
+
         User employee = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("Employee not found: " + userId));
-        
-        com.example.hrcore.dto.FeedbackOperationContext context = 
-            com.example.hrcore.dto.FeedbackOperationContext.builder()
-                .currentUserId(currentUserId)
-                .currentUserRole(currentRole)
-                .page(page)
-                .size(size)
-                .sortBy(sortBy)
-                .sortDirection(sortDirection)
-                .build();
-        
+
+        com.example.hrcore.dto.FeedbackOperationContext context =
+                com.example.hrcore.dto.FeedbackOperationContext.builder()
+                        .currentUserId(currentUserId)
+                        .currentUserRole(currentRole)
+                        .page(page)
+                        .size(size)
+                        .sortBy(sortBy)
+                        .sortDirection(sortDirection)
+                        .build();
+
         if ("received".equalsIgnoreCase(type)) {
             return feedbackService.getReceivedFeedback(userId, context);
         } else if ("given".equalsIgnoreCase(type)) {
             return feedbackService.getGivenFeedback(userId, context);
         } else {
-            com.example.hrcore.dto.FeedbackFilterDto filters = 
-                com.example.hrcore.dto.FeedbackFilterDto.builder()
-                    .toUserId(userId)
-                    .fromUserId(userId)
-                    .build();
-            
-            com.example.hrcore.dto.FeedbackOperationContext newContext = 
-                com.example.hrcore.dto.FeedbackOperationContext.builder()
-                    .currentUserId(currentUserId)
-                    .currentUserRole(currentRole)
-                    .page(page)
-                    .size(size)
-                    .sortBy(sortBy)
-                    .sortDirection(sortDirection)
-                    .build();
-            
+            com.example.hrcore.dto.FeedbackFilterDto filters =
+                    com.example.hrcore.dto.FeedbackFilterDto.builder()
+                            .toUserId(userId)
+                            .fromUserId(userId)
+                            .build();
+
+            com.example.hrcore.dto.FeedbackOperationContext newContext =
+                    com.example.hrcore.dto.FeedbackOperationContext.builder()
+                            .currentUserId(currentUserId)
+                            .currentUserRole(currentRole)
+                            .page(page)
+                            .size(size)
+                            .sortBy(sortBy)
+                            .sortDirection(sortDirection)
+                            .build();
+
             return feedbackService.searchFeedback(filters, newContext);
         }
     }
-    
+
     public PageResponse<com.example.hrcore.dto.AbsenceRequestDto> getEmployeeAbsenceRequests(
             UUID userId, int page, int size, UUID currentUserId, UserRole currentRole) {
-        
-        log.info("Getting absence requests for employee {} by user {} with role {}", 
-            userId, currentUserId, currentRole);
-        
+
+        log.info("Getting absence requests for employee {} by user {} with role {}",
+                userId, currentUserId, currentRole);
+
         if (!currentRole.isManagerOrAbove()) {
             throw new UnauthorizedException("view employee absence requests", "requires manager role or above");
         }
-        
+
         User employee = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("Employee not found: " + userId));
-        
-        com.example.hrcore.dto.AbsenceRequestOperationContext context = 
-            com.example.hrcore.dto.AbsenceRequestOperationContext.builder()
-                .currentUserId(currentUserId)
-                .currentUserRole(currentRole)
-                .build();
-        
+
+        com.example.hrcore.dto.AbsenceRequestOperationContext context =
+                com.example.hrcore.dto.AbsenceRequestOperationContext.builder()
+                        .currentUserId(currentUserId)
+                        .currentUserRole(currentRole)
+                        .build();
+
         return absenceRequestService.getUserRequests(userId, page, size, context);
     }
-    
+
     public PageResponse<com.example.hrcore.dto.FeedbackDto> getEmployeeFeedback(
             UUID userId, int page, int size, String sortBy, String sortDirection,
             UUID currentUserId, UserRole currentRole) {
-        
-        log.info("Getting feedback for employee {} by user {} with role {}", 
-            userId, currentUserId, currentRole);
-        
+
+        log.info("Getting feedback for employee {} by user {} with role {}",
+                userId, currentUserId, currentRole);
+
         if (!currentRole.isManagerOrAbove()) {
             throw new UnauthorizedException("view employee feedback", "requires manager role or above");
         }
-        
+
         User employee = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("Employee not found: " + userId));
-        
-        com.example.hrcore.dto.FeedbackOperationContext context = 
-            com.example.hrcore.dto.FeedbackOperationContext.builder()
-                .currentUserId(currentUserId)
-                .currentUserRole(currentRole)
-                .page(page)
-                .size(size)
-                .sortBy(sortBy)
-                .sortDirection(sortDirection)
-                .build();
-        
+
+        com.example.hrcore.dto.FeedbackOperationContext context =
+                com.example.hrcore.dto.FeedbackOperationContext.builder()
+                        .currentUserId(currentUserId)
+                        .currentUserRole(currentRole)
+                        .page(page)
+                        .size(size)
+                        .sortBy(sortBy)
+                        .sortDirection(sortDirection)
+                        .build();
+
         return feedbackService.getReceivedFeedback(userId, context);
     }
 
@@ -505,21 +496,21 @@ public class ProfileService {
      * - Other users: see only feedback they personally gave to this user
      */
     public PageResponse<com.example.hrcore.dto.FeedbackDto> getUserFeedback(
-            UUID userId, 
+            UUID userId,
             String statusFilter,
             com.example.hrcore.dto.FeedbackOperationContext context) {
-        
+
         User targetUser = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException(userId));
-        
+
         boolean isOwnProfile = Objects.equals(userId, context.getCurrentUserId());
         boolean isManager = context.getCurrentUserRole() == UserRole.MANAGER;
         boolean isAdmin = context.getCurrentUserRole() == UserRole.SUPER_ADMIN;
-        
-        com.example.hrcore.dto.FeedbackFilterDto.FeedbackFilterDtoBuilder filterBuilder = 
-            com.example.hrcore.dto.FeedbackFilterDto.builder()
-                .toUserId(userId);
-        
+
+        com.example.hrcore.dto.FeedbackFilterDto.FeedbackFilterDtoBuilder filterBuilder =
+                com.example.hrcore.dto.FeedbackFilterDto.builder()
+                        .toUserId(userId);
+
         // Apply visibility rules
         if (isManager || isAdmin) {
             // Managers and admins: all feedback for this user, optionally filtered by status
@@ -535,7 +526,7 @@ public class ProfileService {
             // Show only approved feedback others gave
             filterBuilder.status(com.example.hrcore.entity.enums.FeedbackStatus.APPROVED);
         }
-        
+
         return feedbackService.searchFeedback(filterBuilder.build(), context);
     }
 }
